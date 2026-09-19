@@ -1,0 +1,40 @@
+# spotify-service — dependências diretas
+#
+# Só aqui as bibliotecas que o código importa diretamente.
+# Tudo o resto (werkzeug, jinja2, urllib3, google-auth, httpx, ...) é
+# resolvido pelo pip como dependência transitiva — não pertence a este ficheiro.
+#
+# Versões correspondem ao ambiente onde o servidor funciona (2026-09-19).
+#
+# Reproduzir num ambiente limpo:
+#   python -m venv .venv
+#   .venv\Scripts\Activate.ps1
+#   pip install -r requirements.txt
+#
+# Depois de confirmar que o servidor arranca e responde a voz,
+# gerar o lock exato A PARTIR DESSE ambiente limpo:
+#   pip freeze > requirements-lock.txt
+
+# --- Servidor HTTP (porta 8888) ---
+Flask==3.1.3
+
+# --- Anúncio mDNS: spotify-service.local ---
+zeroconf==0.150.0
+
+# --- Cliente HTTP: Spotify Web API, descarga da capa ---
+requests==2.34.2
+
+# --- Configuração a partir do .env ---
+python-dotenv==1.2.3
+
+# --- Gemini: transcrição, interpretação de intents e sessão Live ---
+google-genai==2.20.0
+
+# --- Schema tipado dos intents (SpotifyIntent) ---
+pydantic==2.13.4
+
+# --- Capa do álbum -> RGB565 para a BOX ---
+pillow==12.3.0
+
+# --- Servidor WebSocket de voz (porta 8765) ---
+websockets==16.1.1

@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+
+<html lang="pt">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1">
+
+<title>Spotify Monitor</title>
+
+<style>
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+
+        background:
+            linear-gradient(
+                160deg,
+                #161616,
+                #080808
+            );
+
+        color: white;
+
+        font-family:
+            Arial,
+            Helvetica,
+            sans-serif;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .player {
+        width: min(430px, 92vw);
+
+        padding: 28px;
+
+        background:
+            rgba(255, 255, 255, 0.06);
+
+        border-radius: 24px;
+
+        box-shadow:
+            0 20px 60px
+            rgba(0, 0, 0, 0.45);
+    }
+
+    .cover {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+
+        object-fit: cover;
+
+        border-radius: 18px;
+
+        background: #222;
+
+        display: block;
+    }
+
+    .track {
+        margin-top: 22px;
+
+        font-size: 27px;
+        font-weight: bold;
+
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .artist {
+        margin-top: 7px;
+
+        font-size: 18px;
+
+        color: #bbbbbb;
+
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .album {
+        margin-top: 5px;
+
+        font-size: 14px;
+
+        color: #777777;
+
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .progress-area {
+        margin-top: 28px;
+    }
+
+    .progress-background {
+        position: relative;
+
+        height: 6px;
+
+        background: #3a3a3a;
+
+        border-radius: 20px;
+
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        position: absolute;
+
+        top: 0;
+        left: 0;
+
+        height: 100%;
+        width: 0%;
+
+        background: white;
+
+        border-radius: 20px;
+    }
+
+    .time-row {
+        display: flex;
+
+        justify-content: space-between;
+
+        margin-top: 8px;
+
+        font-size: 13px;
+
+        color: #999999;
+    }
+
+    .controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        
+        gap: 32px;
+
+        margin-top: 25px;
+        margin-bottom: 10px;
+    }
+
+    .control-button {
+        width: 52px;
+        height: 52px;
+
+        border: none;
+        border-radius: 50%;
+
+        background: transparent;
+
+        color: white;
+
+        font-size: 20px;
+
+        cursor: pointer;
+
+        transition:
+            transform 0.15s,
+            background 0.15s;
+    }
+
+
+    .control-button:hover {
+        background:
+            rgba(255,255,255,0.10);
+
+        transform: scale(1.08);
+    }
+
+
+    .control-button:active {
+        transform: scale(0.92);
+    }
+
+
+    .main-button {
+        width: 66px;
+        height: 66px;
+
+        background: white;
+
+        color: black;
+
+        font-size: 25px;
+    }
+
+
+    .main-button:hover {
+        background: #dddddd;
+    }
+
+
+    .status-row {
+        display: flex;
+
+        justify-content: space-between;
+
+        margin-top: 24px;
+
+        padding-top: 18px;
+
+        border-top:
+            1px solid
+            rgba(255, 255, 255, 0.08);
+
+        color: #999999;
+
+        font-size: 14px;
+    }
+
+    .playing {
+        color: #eeeeee;
+    }
+
+    .login {
+        text-align: center;
+    }
+
+    .login a {
+        color: white;
+        text-decoration: none;
+
+        padding: 12px 20px;
+
+        border:
+            1px solid
+            #666666;
+
+        border-radius: 20px;
+    }
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="player" id="player">
+
+    <div id="loginScreen"
+         class="login"
+         style="display:none">
+
+        <h2>Spotify não autenticado</h2>
+
+        <p>
+            <a href="/login">
+                Ligar ao Spotify
+            </a>
+        </p>
+
+    </div>
+
+
+    <div id="playerScreen"
+         style="display:none">
+
+        <img
+            id="cover"
+            class="cover"
+            alt="Capa do álbum"
+        >
+
+        <div
+            id="track"
+            class="track">
+        </div>
+
+        <div
+            id="artist"
+            class="artist">
+        </div>
+
+        <div
+            id="album"
+            class="album">
+        </div>
+
+
+        <div class="progress-area">
+
+            <div class="progress-background">
+
+                <div
+                    id="progressBar"
+                    class="progress-bar">
+                </div>
+
+            </div>
+
+            <div class="time-row">
+
+                <span id="currentTime">
+                    0:00
+                </span>
+
+                <span id="duration">
+                    0:00
+                </span>
+
+            </div>
+
+	</div>
+
+
+	<!-- CONTROLOS -->
+	<div class="controls">
+
+    	<button
+        	class="control-button"
+        	onclick="previousTrack()">
+        	◀◀
+    	</button>
+
+    	<button
+        	id="playPauseButton"
+        	class="control-button main-button"
+        	onclick="togglePlayPause()">
+        	▶
+    	</button>
+
+    	<button
+        	class="control-button"
+        	onclick="nextTrack()">
+        	▶▶
+    	</button>
+
+	</div>
+	
+
+	<!-- STATUS -->
+        <div class="status-row">
+
+            <span id="device"></span>
+
+            <span
+                id="state"
+                class="playing">
+            </span>
+
+        </div>
+
+</div>
+
+    <div
+        id="waitingScreen"
+        style="display:none">
+
+        <h2>Spotify ligado</h2>
+
+        <p>
+            Não existe reprodução ativa.
+        </p>
+
+    </div>
+
+</div>
+
+
+<script>
+
+let progressMs = 0;
+let durationMs = 0;
+let playing = false;
+
+let progressAnchorTime = Date.now();
+
+
+function formatTime(milliseconds) {
+
+    if (!milliseconds) {
+        return "0:00";
+    }
+
+    const totalSeconds =
+        Math.floor(milliseconds / 1000);
+
+    const minutes =
+        Math.floor(totalSeconds / 60);
+
+    const seconds =
+        totalSeconds % 60;
+
+    return (
+        minutes
+        + ":"
+        + seconds
+            .toString()
+            .padStart(2, "0")
+    );
+}
+
+
+function updateProgressDisplay() {
+
+    let currentProgress = progressMs;
+
+    if (playing) {
+
+        const elapsed =
+            Date.now()
+            - progressAnchorTime;
+
+        currentProgress += elapsed;
+
+    }
+
+    if (
+        durationMs > 0
+        &&
+        currentProgress > durationMs
+    ) {
+        currentProgress = durationMs;
+    }
+
+    let percent = 0;
+
+    if (durationMs > 0) {
+
+        percent =
+            (
+                currentProgress
+                /
+                durationMs
+            )
+            * 100;
+
+    }
+
+    document
+        .getElementById("progressBar")
+        .style.width =
+            percent + "%";
+
+    document
+        .getElementById("currentTime")
+        .textContent =
+            formatTime(currentProgress);
+
+    document
+        .getElementById("duration")
+        .textContent =
+            formatTime(durationMs);
+
+}
+
+
+async function loadStatus() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/status",
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        if (response.status === 401) {
+
+            document
+                .getElementById("loginScreen")
+                .style.display = "block";
+
+            document
+                .getElementById("playerScreen")
+                .style.display = "none";
+
+            document
+                .getElementById("waitingScreen")
+                .style.display = "none";
+
+            return;
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        if (!data.active) {
+
+            playing = false;
+            progressMs = 0;
+            durationMs = 0;
+            progressAnchorTime = Date.now();
+
+            document
+                .getElementById("waitingScreen")
+                .style.display = "block";
+
+            document
+                .getElementById("playerScreen")
+                .style.display = "none";
+
+            document
+                .getElementById("loginScreen")
+                .style.display = "none";
+
+            return;
+
+        }
+
+
+        document
+            .getElementById("playerScreen")
+            .style.display = "block";
+
+        document
+            .getElementById("waitingScreen")
+            .style.display = "none";
+
+        document
+            .getElementById("loginScreen")
+            .style.display = "none";
+
+
+        document
+            .getElementById("track")
+            .textContent =
+                data.track;
+
+
+        document
+            .getElementById("artist")
+            .textContent =
+                data.artist;
+
+
+        document
+            .getElementById("album")
+            .textContent =
+                data.album;
+
+
+        document
+            .getElementById("device")
+            .textContent =
+                data.device;
+
+
+        document
+            .getElementById("state")
+            .textContent =
+                data.playing
+                ? "PLAYING"
+                : "PAUSED";
+
+
+        const coverElement =
+            document.getElementById("cover");
+
+        if (data.cover) {
+
+            coverElement.src = data.cover;
+            coverElement.style.display = "block";
+
+        }
+        else {
+
+            coverElement.removeAttribute("src");
+            coverElement.style.display = "none";
+
+        }
+
+
+        progressMs =
+            data.progress_ms || 0;
+
+        durationMs =
+            data.duration_ms || 0;
+
+        playing =
+            data.playing;
+        
+        document
+            .getElementById("playPauseButton")
+            .textContent =
+                playing
+                ? "❚❚"
+                : "▶";
+
+        progressAnchorTime =
+            Date.now();
+
+
+        updateProgressDisplay();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Erro ao consultar Spotify:",
+            error
+        );
+
+    }
+
+}
+
+async function sendCommand(command) {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/" + command,
+                {
+                    method: "POST"
+                }
+            );
+
+        const result =
+            await response.json();
+
+
+        if (!result.success) {
+
+            console.error(
+                "Erro no comando Spotify:",
+                result
+            );
+
+            return false;
+        }
+
+        return true;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Erro ao enviar comando:",
+            error
+        );
+
+        return false;
+    }
+
+}
+
+
+async function togglePlayPause() {
+
+    const button =
+        document.getElementById(
+            "playPauseButton"
+        );
+
+
+    if (playing) {
+
+        const success =
+            await sendCommand("pause");
+
+        if (success) {
+
+            // Calcula a posição atual antes de parar
+            progressMs +=
+                Date.now()
+                - progressAnchorTime;
+
+            playing = false;
+
+            progressAnchorTime =
+                Date.now();
+
+            button.textContent = "▶";
+
+            document
+                .getElementById("state")
+                .textContent =
+                    "PAUSED";
+        }
+
+    }
+
+    else {
+
+        const success =
+            await sendCommand("play");
+
+        if (success) {
+
+            playing = true;
+
+            progressAnchorTime =
+                Date.now();
+
+            button.textContent = "❚❚";
+
+            document
+                .getElementById("state")
+                .textContent =
+                    "PLAYING";
+        }
+
+    }
+
+
+    // Confirma depois o estado real no Spotify
+    setTimeout(
+        loadStatus,
+        500
+    );
+}
+
+
+async function nextTrack() {
+
+    const success =
+        await sendCommand("next");
+
+    if (success) {
+
+        // Dá algum tempo ao Spotify
+        // para mudar de faixa
+
+        setTimeout(
+            loadStatus,
+            500
+        );
+    }
+}
+
+
+async function previousTrack() {
+
+    const success =
+        await sendCommand("previous");
+
+    if (success) {
+
+        setTimeout(
+            loadStatus,
+            500
+        );
+    }
+}
+// Sincronização com o Spotify
+// a cada 5 segundos.
+
+setInterval(
+    loadStatus,
+    5000
+);
+
+
+// Movimento visual suave.
+// Não faz pedidos ao Spotify.
+
+setInterval(
+    updateProgressDisplay,
+    100
+);
+
+
+// Primeira consulta imediatamente.
+
+loadStatus();
+
+</script>
+
+
+</body>
+
+</html>

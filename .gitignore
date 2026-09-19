@@ -1,0 +1,47 @@
+# ==========================================================
+# SEGREDOS — nunca commitar
+# ==========================================================
+.env
+.env.*
+!.env.example
+.spotify_token.json
+
+# ==========================================================
+# Ambiente Python
+# ==========================================================
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ==========================================================
+# Artefactos gerados em execução
+# ==========================================================
+# Escrito pelo /api/voice a cada pedido de voz
+command.wav
+
+# Saída de depuração do gemini_live_test.py
+gemini_live_reply.wav
+
+# Capa convertida, despejada para inspeção
+cover.rgb565
+
+# Registo de métricas por turno (Fase 1.3)
+*.jsonl
+
+# NOTA: jarvis_reply.wav NÃO está ignorado de propósito.
+# É um asset lido por load_jarvis_reply() no app.py, não um ficheiro gerado.
+
+# ==========================================================
+# Editor e sistema
+# ==========================================================
+.vscode/
+.idea/
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
