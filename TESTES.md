@@ -151,6 +151,62 @@ Dizer **"Jarvis"**, depois **"mete o volume a quarenta"**.
 
 ---
 
+## F — Contrato de conversa e fallback *(Fases 1.1 e 1.2)*
+
+### T16 · Timeout de follow-up
+Fazer uma pergunta normal, ouvir a resposta, e depois ficar em **silêncio
+absoluto mais de 40 s**.
+
+**Esperado:** aos ~30 s o servidor envia `SLEEP` e a BOX regista
+`SLEEP recebido; conversa Gemini terminou`. Um "Jarvis" a seguir funciona.
+**Falha se:** a BOX continuar a aceitar fala sem wake word passados 45 s.
+
+### T17 · SLEEP perdido ⚠️
+Com a conversa activa e a BOX em follow-up, **matar o servidor** (Ctrl+C) e
+manter silêncio absoluto 45 s.
+
+**Esperado:** `Sem SLEEP do servidor apos 40 s; Jarvis rearmado localmente`.
+**Falha se:** a BOX ficar presa em follow-up à espera de uma mensagem que já
+não pode chegar.
+
+Este é o único teste que valida a camada 3 da Fase 1.1 — a rede de segurança
+local. É também o mais fácil de dar por passado sem o ser: se a BOX recuperar
+por outro caminho (por exemplo `Nao foi possivel armar Live`), o timeout **não**
+foi exercitado e o resultado é inconclusivo, não `OK`. Procurar a linha exacta.
+
+### T18 · Fecho por voz *(Fase 1.4 — ainda não implementado)*
+Fazer uma pergunta normal, ouvir a resposta e dizer **"obrigado, é tudo"**.
+
+**Esperado:** o Jarvis despede-se, a despedida toca **inteira**, e o log mostra
+`end_conversation` seguido de `SLEEP` e `DONE`. A BOX volta a exigir a palavra de
+acordar imediatamente, sem esperar os 30 s.
+**Falha se:** a BOX rearmar antes de a despedida acabar de tocar.
+
+### T19 · Falso positivo de despedida *(Fase 1.4)*
+Dizer **"obrigado por teres posto essa música"**.
+
+**Esperado:** a conversa **não** termina.
+**Critério de aceitação da Fase 1.4.**
+
+### T20 · Fallback HTTP sem a BOX
+Com o `app.py` a correr, na pasta do servidor:
+
+```powershell
+python teste_fallback_http.py
+```
+
+**Esperado:** `PASSA`, HTTP 200, e alguns segundos de áudio devolvido. No log do
+servidor aparece `[LIVE] Tu: ...`.
+**Falha se:** zero bytes — é a assinatura do B2, em que a excepção morria dentro
+do gerador e o Flask fechava a resposta vazia.
+
+Este teste existe porque o caminho HTTP só corre no firmware quando a sessão
+WebSocket **nunca chega a armar** (`voice.c`, l. 1627-1647), o que é raro e
+difícil de provocar à mão. Foi por isso que o B2 sobreviveu meses sem ninguém
+dar por ele: o ramo estava sempre a rebentar, mas quase nunca era chamado.
+
+---
+
 ## Registo
 
 Legenda: `OK` · `FALHA` · `—` (não medido) · `?` (inconclusivo)

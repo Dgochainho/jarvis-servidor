@@ -1,0 +1,18 @@
+# Marcar explicitamente o que é binário.
+#
+# O git costuma detectar binários sozinho, mas em Windows, com
+# core.autocrlf activo, um falso negativo significa CRLF injectado no meio
+# de amostras PCM — e o ficheiro deixa de ser um WAV válido sem que nada
+# se queixe. Já aconteceu uma vez nesta sessão, por outra via: a fixture
+# teste_comando.wav chegou a ficar corrompida ao atravessar uma ponte que
+# a tratou como texto.
+#
+# A fixture do teste_fallback_http.py é versionada e tem de sair do
+# checkout byte a byte igual, senão o teste mede outra coisa.
+
+*.wav   binary
+*.pcm   binary
+*.rgb565 binary
+
+# Scripts de PowerShell: manter CRLF, que é o que o Windows espera.
+*.ps1   text eol=crlf
