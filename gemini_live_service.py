@@ -16,6 +16,7 @@ from jarvis_live import (
     build_live_config,
     dispatch_tool_calls,
 )
+from turn_log import registar_turno, segundos
 
 
 load_dotenv()
@@ -53,6 +54,20 @@ async def _live_worker(pcm16, output_queue):
 
     Com VAD automático desativado NÃO se envia audio_stream_end.
     """
+
+    # Acumuladores do registo de turnos. Declarados aqui, antes do try,
+    # para que o finally os encontre mesmo se a sessão nem chegar a abrir.
+    turno_inicio = time.perf_counter()
+    turno = {
+        "resultado": "erro",
+        "erro": None,
+        "ouvido": "",
+        "dito": "",
+        "ferramentas": [],
+        "bytes_out": 0,
+        "t_primeiro_audio": None,
+        "t_ferramentas": 0.0,
+    }
 
     try:
         client = genai.Client(
@@ -133,12 +148,22 @@ async def _live_worker(pcm16, output_queue):
                     # -----------------------------------------
 
                     if response.tool_call:
-                        function_responses = (
+                        # Cronometrado à parte: está dentro do
+                        # t_primeiro_audio mas não é latência do modelo.
+                        ferramentas_inicio = time.perf_counter()
+
+                        function_responses, registos = (
                             await dispatch_tool_calls(
                                 response.tool_call,
                                 "[LIVE]",
                             )
                         )
+
+                        turno["t_ferramentas"] += (
+                            time.perf_counter() - ferramentas_inicio
+                        )
+
+                        turno["ferramentas"].extend(registos)
 
                         await session.send_tool_response(
                             function_responses=
@@ -178,6 +203,8 @@ async def _live_worker(pcm16, output_queue):
                         heard = content.input_transcription.text
 
                         if heard:
+                            turno["ouvido"] += heard
+
                             print(
                                 f"[LIVE] Tu: {heard}"
                             )
@@ -186,6 +213,8 @@ async def _live_worker(pcm16, output_queue):
                         spoken = content.output_transcription.text
 
                         if spoken:
+                            turno["dito"] += spoken
+
                             print(
                                 f"[LIVE] Jarvis: {spoken}"
                             )
@@ -215,6 +244,8 @@ async def _live_worker(pcm16, output_queue):
                                 - response_start
                             )
 
+                            turno["t_primeiro_audio"] = latency
+
                             print(
                                 "[LIVE] >>> primeiro chunk "
                                 "de voz recebido <<<"
@@ -230,6 +261,8 @@ async def _live_worker(pcm16, output_queue):
                         total_16k += len(
                             pcm16_out
                         )
+
+                        turno["bytes_out"] = total_16k
 
                         # Usa uma thread auxiliar para que uma BOX/cliente
                         # HTTP momentaneamente lento não bloqueie o event
@@ -249,6 +282,8 @@ async def _live_worker(pcm16, output_queue):
                 f"{total_16k} bytes a 16 kHz"
             )
 
+            turno["resultado"] = "done"
+
     except TimeoutError:
         exc = RuntimeError(
             "Timeout à espera da resposta Gemini Live"
@@ -258,6 +293,7 @@ async def _live_worker(pcm16, output_queue):
             f"[LIVE] ERRO: {exc}"
         )
 
+        turno["erro"] = str(exc)
         output_queue.put(exc)
 
     except Exception as exc:
@@ -265,10 +301,40 @@ async def _live_worker(pcm16, output_queue):
             f"[LIVE] ERRO: {exc}"
         )
 
+        turno["erro"] = f"{type(exc).__name__}: {exc}"
         output_queue.put(exc)
 
     finally:
         output_queue.put(_END)
+
+        # fallback=True é o campo que fecha a decisão D1: sem ele não
+        # há como saber se este caminho alguma vez é usado em campo.
+        registar_turno({
+            "conversa": "",
+            "turno": 1,
+            "resultado": turno["resultado"],
+            "erro": turno["erro"],
+            "fallback": True,
+
+            "t_fala": segundos(len(pcm16) / INPUT_BYTES_PER_SECOND),
+            "t_primeiro_audio": segundos(turno["t_primeiro_audio"]),
+            "t_ferramentas": segundos(turno["t_ferramentas"]),
+            "t_modelo": segundos(
+                None if turno["t_primeiro_audio"] is None
+                else max(
+                    0.0,
+                    turno["t_primeiro_audio"] - turno["t_ferramentas"],
+                )
+            ),
+            "t_total": segundos(time.perf_counter() - turno_inicio),
+
+            "bytes_in": len(pcm16),
+            "bytes_out": turno["bytes_out"],
+
+            "ouvido": turno["ouvido"],
+            "dito": turno["dito"],
+            "ferramentas": turno["ferramentas"],
+        })
 
 
 def stream_gemini_live_reply(pcm16):

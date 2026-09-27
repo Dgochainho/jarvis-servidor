@@ -197,7 +197,16 @@ def build_live_config():
 
 async def dispatch_tool_calls(tool_call, log_prefix):
     """
-    Executa as ferramentas pedidas pelo Gemini e devolve as respostas.
+    Executa as ferramentas pedidas pelo Gemini.
+
+    Devolve `(function_responses, registos)`:
+
+        function_responses — para enviar de volta ao Gemini
+        registos          — resumo do que correu, para o registo de turnos
+
+    O segundo existe porque, sem ele, a única prova de que uma ferramenta foi
+    chamada é uma linha de stdout que desaparece com a janela. Uma pergunta
+    como "quantas vezes o `next` falhou esta semana?" não tem hoje resposta.
 
     `log_prefix` é só a etiqueta do log ("[LIVE]" ou "[VOICE-WS]"), para
     que os dois caminhos continuem distinguíveis no stdout.
@@ -207,6 +216,7 @@ async def dispatch_tool_calls(tool_call, log_prefix):
     aqui derrubava a conversa inteira.
     """
     function_responses = []
+    registos = []
 
     for fc in tool_call.function_calls:
         print(f"{log_prefix} Tool call: {fc.name}({fc.args})")
@@ -238,4 +248,10 @@ async def dispatch_tool_calls(tool_call, log_prefix):
             )
         )
 
-    return function_responses
+        registos.append({
+            "nome": fc.name,
+            "args": dict(fc.args or {}),
+            "ok": bool(result.get("ok")),
+        })
+
+    return function_responses, registos

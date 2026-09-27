@@ -2,7 +2,8 @@ import asyncio
 import os
 import threading
 import time
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -19,6 +20,7 @@ from jarvis_live import (
     build_live_config,
     dispatch_tool_calls,
 )
+from turn_log import registar_turno, segundos
 
 
 load_dotenv()
@@ -61,13 +63,26 @@ _QUEUE_CANCEL = object()
 
 @dataclass
 class TurnStats:
-    """Métricas medidas no instante em que o PC recebe áudio da BOX."""
+    """
+    Tudo o que sabemos sobre um turno, medido do lado do PC.
+
+    Os instantes são `time.perf_counter()` — monotónicos, imunes a acertos
+    do relógio. A hora legível é posta pelo turn_log no momento da escrita.
+    """
 
     wake_received_at: float
     start_received_at: Optional[float] = None
     first_pcm_received_at: Optional[float] = None
     end_received_at: Optional[float] = None
     bytes_received: int = 0
+
+    # Preenchidos durante a resposta do Gemini.
+    first_audio_at: Optional[float] = None
+    bytes_sent: int = 0
+    heard: str = ""
+    spoken: str = ""
+    tools: list = field(default_factory=list)
+    tool_seconds: float = 0.0
 
     @property
     def pcm_duration_seconds(self) -> float:
@@ -82,6 +97,68 @@ class TurnStats:
             return 0.0
 
         return self.end_received_at - self.first_pcm_received_at
+
+    @property
+    def wake_to_start_seconds(self) -> Optional[float]:
+        """Quanto tempo o utilizador demorou a falar depois do "Jarvis"."""
+        if self.start_received_at is None:
+            return None
+
+        return self.start_received_at - self.wake_received_at
+
+    @property
+    def first_audio_seconds(self) -> Optional[float]:
+        """
+        END -> primeiro áudio de volta. É a latência que se sente.
+
+        Medida a partir do END e não do WAKE: o tempo que o utilizador leva
+        a falar não é latência do sistema, e misturá-los era a maneira mais
+        fácil de tornar este número inútil.
+        """
+        if (
+            self.first_audio_at is None
+            or self.end_received_at is None
+        ):
+            return None
+
+        return self.first_audio_at - self.end_received_at
+
+    @property
+    def model_seconds(self) -> Optional[float]:
+        """
+        O mesmo, descontado o tempo passado dentro das ferramentas.
+
+        Quando o Gemini chama o `spotify_control`, a ida à API do Spotify
+        acontece ANTES de ele começar a falar — e por isso estava a ser
+        contada como latência do modelo. Um turno com ferramenta e outro
+        sem ferramenta não eram comparáveis, e nada no número o dizia.
+
+        É o mesmo erro do aviso dos 32 KB/s no display_LCD.c: um número que
+        mede um pipeline inteiro e que se lê como se medisse uma parte.
+        """
+        total = self.first_audio_seconds
+
+        if total is None:
+            return None
+
+        return max(0.0, total - self.tool_seconds)
+
+    @property
+    def transporte_suspeito(self) -> bool:
+        """
+        O áudio demorou muito mais a chegar do que a sua própria duração?
+
+        A BOX envia PCM em tempo real, por isso receber 3 s de fala deve
+        demorar ~3 s. Uma diferença grande é bloqueio no transporte — o
+        modo de falha do B4 — e não lentidão do Gemini.
+        """
+        if self.bytes_received == 0 or self.receive_wall_seconds == 0.0:
+            return False
+
+        return (
+            self.receive_wall_seconds
+            > self.pcm_duration_seconds + 2.0
+        )
 
 
 class LiveVoiceWebSocketServer:
@@ -373,6 +450,12 @@ class LiveVoiceWebSocketServer:
     ) -> str:
         config = build_live_config()
 
+        # Identificador curto para agrupar os turnos desta conversa no
+        # registo. É o que permite ver, mais tarde, que o 1.º turno paga a
+        # abertura da sessão Gemini e os seguintes não — os ~3 s que a
+        # reutilização da sessão poupa, e que são o número a proteger.
+        conversa_id = uuid.uuid4().hex[:8]
+
         open_start = time.perf_counter()
 
         print(
@@ -415,6 +498,8 @@ class LiveVoiceWebSocketServer:
                         result = await self._run_turn(
                             websocket,
                             session,
+                            conversa_id=conversa_id,
+                            turno_numero=turn_number,
                         )
 
                         if result != "done":
@@ -516,6 +601,8 @@ class LiveVoiceWebSocketServer:
         self,
         websocket: ServerConnection,
         session,
+        conversa_id: str = "",
+        turno_numero: int = 0,
     ) -> str:
         # 12 s / 16 ms por frame = 750 frames, mais os controlos.
         input_queue: asyncio.Queue = asyncio.Queue(
@@ -548,6 +635,12 @@ class LiveVoiceWebSocketServer:
             name="gemini-live-turn",
         )
 
+        # Como é que este turno acabou. Preenchido nos vários caminhos de
+        # saída e escrito no finally, para que nenhum deles escape ao
+        # registo — incluindo as excepções.
+        resultado = "erro"
+        erro_descricao = None
+
         try:
             # Primeiro escoamos o protocolo da BOX até END/CANCEL.
             # Assim, mesmo se o Gemini falhar cedo, não deixamos PCM
@@ -572,6 +665,8 @@ class LiveVoiceWebSocketServer:
                 # sempre e só "o turno acabou".
                 await websocket.send("SLEEP")
                 await websocket.send("DONE")
+
+                resultado = "cancelled"
                 return "cancelled"
 
             if receiver_result != "ended":
@@ -589,7 +684,16 @@ class LiveVoiceWebSocketServer:
                 )
 
             await websocket.send("DONE")
+
+            resultado = "done"
             return "done"
+
+        except BaseException as exc:
+            # Inclui asyncio.CancelledError de propósito: um turno
+            # interrompido também é informação, e é o caso que hoje
+            # desaparece sem deixar rasto.
+            erro_descricao = self._format_exception(exc)
+            raise
 
         finally:
             for task in (
@@ -604,6 +708,51 @@ class LiveVoiceWebSocketServer:
                 gemini_task,
                 return_exceptions=True,
             )
+
+            self._registar_turno(
+                stats=stats,
+                conversa_id=conversa_id,
+                turno_numero=turno_numero,
+                resultado=resultado,
+                erro=erro_descricao,
+            )
+
+
+    def _registar_turno(
+        self,
+        stats: TurnStats,
+        conversa_id: str,
+        turno_numero: int,
+        resultado: str,
+        erro: Optional[str],
+    ) -> None:
+        """Uma linha no turnos.jsonl. Ver turn_log.py."""
+        fim = time.perf_counter()
+
+        registar_turno({
+            "conversa": conversa_id,
+            "turno": turno_numero,
+            "resultado": resultado,
+            "erro": erro,
+            "fallback": False,
+
+            "t_wake_start": segundos(stats.wake_to_start_seconds),
+            "t_fala": segundos(stats.pcm_duration_seconds),
+            "t_receber": segundos(stats.receive_wall_seconds),
+            "t_primeiro_audio": segundos(stats.first_audio_seconds),
+            "t_ferramentas": segundos(stats.tool_seconds),
+            "t_modelo": segundos(stats.model_seconds),
+            "t_total": segundos(fim - stats.wake_received_at),
+
+            "bytes_in": stats.bytes_received,
+            "bytes_out": stats.bytes_sent,
+
+            "ouvido": stats.heard,
+            "dito": stats.spoken,
+            "ferramentas": stats.tools,
+
+            "transporte_suspeito": stats.transporte_suspeito,
+        })
 
 
     async def _receive_turn_input(
@@ -771,12 +920,22 @@ class LiveVoiceWebSocketServer:
                 # -------------------------------------------------
 
                 if response.tool_call:
-                    function_responses = (
+                    # Cronometrado à parte: este tempo está dentro do
+                    # t_primeiro_audio mas não é latência do modelo.
+                    ferramentas_inicio = time.perf_counter()
+
+                    function_responses, registos = (
                         await dispatch_tool_calls(
                             response.tool_call,
                             "[VOICE-WS]",
                         )
                     )
+
+                    stats.tool_seconds += (
+                        time.perf_counter() - ferramentas_inicio
+                    )
+
+                    stats.tools.extend(registos)
 
                     await session.send_tool_response(
                         function_responses=
@@ -799,12 +958,17 @@ class LiveVoiceWebSocketServer:
                 if content is None:
                     continue
 
+                # As transcrições chegam aos pedaços, não de uma vez, por
+                # isso acumulam-se. Guardar só a última daria a cauda da
+                # frase — que foi um erro cometido antes noutro sítio.
                 if content.input_transcription:
                     value = (
                         content.input_transcription.text
                     )
 
                     if value:
+                        stats.heard += value
+
                         print(
                             f"[VOICE-WS] Tu: {value}"
                         )
@@ -815,6 +979,8 @@ class LiveVoiceWebSocketServer:
                     )
 
                     if value:
+                        stats.spoken += value
+
                         print(
                             f"[VOICE-WS] Jarvis: {value}"
                         )
@@ -837,8 +1003,10 @@ class LiveVoiceWebSocketServer:
                         continue
 
                     if first_audio:
+                        stats.first_audio_at = time.perf_counter()
+
                         latency = (
-                            time.perf_counter()
+                            stats.first_audio_at
                             - response_start
                         )
 
@@ -851,6 +1019,7 @@ class LiveVoiceWebSocketServer:
                         first_audio = False
 
                     total_output += len(pcm16)
+                    stats.bytes_sent = total_output
 
                     # 1024 B = 32 ms. Mantém as escritas no
                     # callback da BOX curtas e previsíveis.
