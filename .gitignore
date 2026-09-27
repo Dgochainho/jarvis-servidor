@@ -28,11 +28,23 @@ gemini_live_reply.wav
 # Capa convertida, despejada para inspeção
 cover.rgb565
 
+# Respostas de áudio despejadas pelos testes
+*.pcm
+
 # Registo de métricas por turno (Fase 1.3)
 *.jsonl
 
+# Logs das corridas de teste
+log-*.txt
+testes/
+
 # NOTA: jarvis_reply.wav NÃO está ignorado de propósito.
 # É um asset lido por load_jarvis_reply() no app.py, não um ficheiro gerado.
+#
+# NOTA: teste_comando.wav também NÃO está ignorado de propósito.
+# É a fixture do teste_fallback_http.py. Ao contrário do command.wav,
+# que o /api/voice reescreve a cada pedido, esta tem de ser estável —
+# senão o teste media uma coisa diferente de cada vez.
 
 # ==========================================================
 # Editor e sistema

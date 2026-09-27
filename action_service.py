@@ -80,8 +80,21 @@ def execute_intent(intent):
         # CURRENT TRACK
         # -----------------------------------------
         if action == "current_track":
+            # Esta chamada acontece dentro de um turno de voz, com o
+            # utilizador à espera. Uma ida fresca à API do Spotify custa
+            # entre 1 e 5 s; para dizer que música está a tocar, uma
+            # resposta com alguns segundos é indistinguível da actual.
+            #
+            # 15 s e não 8 porque o polling da BOX fica suspenso durante a
+            # voz: quando este pedido chega, o último polling já tem a
+            # duração do turno. Com 8 s acertávamos em cerca de metade das
+            # vezes; com 15 acertamos quase sempre.
+            #
+            # Seguro porque send_command invalida a cache — depois de um
+            # "passa esta" a resposta seguinte é sempre fresca.
             response = requests.get(
                 f"{BASE_URL}/api/status",
+                params={"max_age": 15},
                 timeout=10,
             )
 

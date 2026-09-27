@@ -153,13 +153,66 @@ Dizer **"Jarvis"**, depois **"mete o volume a quarenta"**.
 
 ## Registo
 
-Baseline esperada hoje: **T01–T08, T10, T11 passam · T09 falha (B1) · T12, T13 por medir · T14, T15 falham por desenho.**
+Legenda: `OK` · `FALHA` · `—` (não medido) · `?` (inconclusivo)
 
-| Data | Commit servidor | Commit firmware | T01 | T02 | T03 | T04 | T05 | T06 | T07 | T08 | T09 | T10 | T11 | T12 | T13 | T14 | T15 | Latência T06 | Notas |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| | | | | | | | | | | | | | | | | | | | |
+## Baseline 1 — 2026-09-22
 
-Legenda: `OK` · `FALHA` · `—` (não aplicável) · `?` (inconclusivo)
+Firmware `2849c97` (`v0-funcional-2-g2849c97`) · Servidor `94b14d2`
+RSSI da BOX: **-73 dBm** (variou entre -73 e -80 ao longo da sessão)
+
+| Teste | Resultado | Nota |
+|---|---|---|
+| T01 Arranque do servidor | OK | |
+| T02 BOX encontra o serviço | OK | |
+| T03 Botões de transporte | OK | |
+| T04 Capa do álbum | OK | 28800 bytes |
+| T05 Progresso temporal | OK | |
+| T06 Pergunta simples | OK | ver latências abaixo |
+| T07 Comando de transporte | OK | tool call `next`, faixa mudou |
+| T08 Follow-up sem wake word | OK | |
+| **T09 Jarvis + silêncio** | **FALHA** | **B1 confirmado — ver abaixo** |
+| T10 Comando longo | OK | corte exacto a 12,00 s / 384000 bytes |
+| T11 Servidor reinicia | OK (informal) | recuperou sozinho por mDNS várias vezes |
+| T12 Auto-activação | — | critério da Fase 3, não medido |
+| T13 Falso positivo em ruído | — | critério da Fase 3, não medido |
+| T14 Pesquisa e reprodução | FALHA | por desenho, não implementado |
+| T15 Volume | FALHA | por desenho, não implementado |
+
+### Latências medidas
+
+Do `END enviado` ao `A reproduzir resposta`:
+
+| Tipo de turno | Medições | Intervalo |
+|---|---|---|
+| Primeiro turno (abre sessão Gemini) | 3,79 s · 4,88 s · 2,65 s | **2,7 – 4,9 s** |
+| Follow-up (reutiliza sessão) | 1,02 s · 1,22 s | **1,0 – 1,2 s** |
+
+A reutilização da sessão Gemini vale cerca de **3 segundos por turno**. É o número a defender em qualquer alteração futura ao ciclo de vida da conversa.
+
+### T09 — o que realmente acontece
+
+```
+I (592353)  >>> JARVIS DETETADO <<<
+W (596353)  Comando cancelado: nenhuma fala apos Jarvis     ← timeout de 4 s, correcto
+I (596353)  CANCEL enviado ao servidor Live
+I (596363)  Interacao de voz concluida com sucesso           ← a BOX lê "sucesso"
+I (596383)  Turno concluido; conversa continua ativa
+I (596383)  Conversa ativa; a aguardar nova fala sem Jarvis... ← WakeNet desligado
+...
+I (607393)  >>> FOLLOW-UP DETETADO SEM JARVIS <<<            ← o 2.º "Jarvis", 11 s depois
+```
+
+O segundo "Jarvis" **não** rearmou a palavra de acordar. Foi tratado como fala de
+follow-up e transmitido ao Gemini como se fosse um comando.
+
+**A formulação correcta do sintoma não é "a BOX fica surda".** Ela continua a
+responder — deixa é de **exigir** a palavra de acordar, indefinidamente. Do lado
+do servidor, o CANCEL termina a conversa e volta ao ciclo de espera sem enviar
+`SLEEP`, e o estado `WAIT_FOLLOWUP_SPEECH` da BOX não tem timeout local. A partir
+daí qualquer som que active o VAD abre um turno e é enviado para o Gemini.
+
+Visto assim é pior do que parecia: não é perda de funcionalidade, é perda do
+portão de privacidade.
 
 Guardar o `log-servidor.txt` e o output do monitor de cada execução numa pasta
 `testes/<data>/`. É o que permite comparar dois dias diferentes.

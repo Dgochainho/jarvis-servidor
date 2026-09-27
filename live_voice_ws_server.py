@@ -1,6 +1,5 @@
 import asyncio
 import os
-import struct
 import threading
 import time
 from dataclasses import dataclass
@@ -11,7 +10,15 @@ from google import genai
 from google.genai import types
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
-from action_service import execute_spotify_action
+
+# O que este caminho partilha com o fallback HTTP vive em jarvis_live.py.
+# Ver o cabeçalho desse módulo para o porquê.
+from jarvis_live import (
+    MODEL,
+    Pcm24kTo16k,
+    build_live_config,
+    dispatch_tool_calls,
+)
 
 
 load_dotenv()
@@ -23,8 +30,6 @@ if not API_KEY:
         "GEMINI_API_KEY não encontrada no .env"
     )
 
-
-MODEL = "gemini-3.1-flash-live-preview"
 
 VOICE_WS_PATH = "/voice"
 
@@ -77,47 +82,6 @@ class TurnStats:
             return 0.0
 
         return self.end_received_at - self.first_pcm_received_at
-
-
-class Pcm24kTo16k:
-    """Conversor stateful PCM16 mono, 24 kHz -> 16 kHz."""
-
-    def __init__(self) -> None:
-        self.carry = b""
-
-    def convert(self, pcm24: bytes) -> bytes:
-        data = self.carry + pcm24
-
-        # 3 amostras PCM16 = 6 bytes e produzem 2 amostras.
-        usable = (len(data) // 6) * 6
-
-        if usable == 0:
-            self.carry = data
-            return b""
-
-        output = bytearray()
-
-        for offset in range(0, usable, 6):
-            a, b, c = struct.unpack_from(
-                "<hhh",
-                data,
-                offset,
-            )
-
-            # Razão exata 3:2. A segunda amostra fica a meio de b e c.
-            out1 = a
-            out2 = int((int(b) + int(c)) / 2)
-
-            output.extend(
-                struct.pack(
-                    "<hh",
-                    out1,
-                    out2,
-                )
-            )
-
-        self.carry = data[usable:]
-        return bytes(output)
 
 
 class LiveVoiceWebSocketServer:
@@ -360,10 +324,14 @@ class LiveVoiceWebSocketServer:
                         continue
 
                     if message == "CANCEL":
-                        # CANCEL fora de turno é inofensivo.
+                        # Fora de turno não há conversa para terminar, mas
+                        # enviamos SLEEP à mesma: se um SLEEP anterior se
+                        # perdeu, a BOX pode estar em follow-up, e este
+                        # devolve-a deterministicamente a WAIT_WAKE.
                         print(
                             "[VOICE-WS] CANCEL recebido fora de turno"
                         )
+                        await websocket.send("SLEEP")
                         await websocket.send("DONE")
                         continue
 
@@ -403,81 +371,7 @@ class LiveVoiceWebSocketServer:
         self,
         websocket: ServerConnection,
     ) -> str:
-        config = {
-            "response_modalities": ["AUDIO"],
-
-            "tools": [
-                {
-                    "function_declarations": [
-                        {
-                            "name": "spotify_control",
-                            "description": (
-                                "Controla a reprodução Spotify do utilizador. "
-                                "Usa esta função para pausar, retomar, avançar "
-                                "para a próxima música, voltar à música anterior "
-                                "ou consultar a música atualmente selecionada."
-                            ),
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "action": {
-                                        "type": "string",
-                                        "enum": [
-                                            "pause",
-                                            "resume",
-                                            "next",
-                                            "previous",
-                                            "current_track",
-                                        ],
-                                        "description": (
-                                            "A ação Spotify que deve ser executada."
-                                        ),
-                                    }
-                                },
-                                "required": ["action"],
-                            },
-                        }
-                    ]
-                }
-            ],
-
-            "input_audio_transcription": {},
-            "output_audio_transcription": {},
-
-            "realtime_input_config": {
-                "automatic_activity_detection": {
-                    "disabled": True
-                }
-            },
-
-            "system_instruction": {
-                "parts": [
-                    {
-                        "text": (
-                            "És Jarvis, um assistente pessoal de "
-                            "inteligência artificial. "
-                            "Fala em português de Portugal, salvo se "
-                            "o utilizador pedir outra língua. "
-                            "Responde de forma natural, útil e "
-                            "relativamente concisa. "
-
-                            "Quando o utilizador pedir uma ação sobre o "
-                            "Spotify, usa obrigatoriamente a ferramenta "
-                            "spotify_control. "
-
-                            "Usa-a também quando o utilizador perguntar "
-                            "qual música está atualmente selecionada. "
-
-                            "Para comandos Spotify, chama primeiro a "
-                            "ferramenta e só depois responde verbalmente. "
-
-                            "Nunca digas que uma ação Spotify foi executada "
-                            "sem teres recebido sucesso da ferramenta."
-                        )
-                    }
-                ]
-            },
-        }
+        config = build_live_config()
 
         open_start = time.perf_counter()
 
@@ -589,11 +483,16 @@ class LiveVoiceWebSocketServer:
                             if message == "CANCEL":
                                 print(
                                     "[VOICE-WS] CANCEL recebido "
-                                    "entre turnos"
+                                    "entre turnos; a encerrar conversa"
                                 )
 
+                                # CANCEL termina a conversa, não só o turno.
+                                # Antes, isto mantinha a sessão Gemini viva e
+                                # a BOX em follow-up — os dois lados ficavam
+                                # a discordar sobre o estado da conversa.
+                                await websocket.send("SLEEP")
                                 await websocket.send("DONE")
-                                continue
+                                return "done"
 
                             if isinstance(message, bytes):
                                 # Frame residual de um turno anterior.
@@ -664,6 +563,14 @@ class LiveVoiceWebSocketServer:
                     return_exceptions=True,
                 )
 
+                # CANCEL termina a conversa, não apenas o turno.
+                #
+                # O DONE sozinho era ambíguo: a BOX lia-o como "turno
+                # concluído, conversa viva" e entrava em follow-up com o
+                # WakeNet desligado, enquanto aqui a conversa era encerrada.
+                # O SLEEP desfaz essa ambiguidade — DONE passa a significar
+                # sempre e só "o turno acabou".
+                await websocket.send("SLEEP")
                 await websocket.send("DONE")
                 return "cancelled"
 
@@ -864,51 +771,12 @@ class LiveVoiceWebSocketServer:
                 # -------------------------------------------------
 
                 if response.tool_call:
-                    function_responses = []
-
-                    for fc in response.tool_call.function_calls:
-                        print(
-                            f"[VOICE-WS] TOOL chamada: "
-                            f"{fc.name} | args={fc.args}"
+                    function_responses = (
+                        await dispatch_tool_calls(
+                            response.tool_call,
+                            "[VOICE-WS]",
                         )
-
-                        if fc.name == "spotify_control":
-                            args = dict(fc.args or {})
-                            action = args.get("action")
-
-                            print(
-                                "[VOICE-WS] Spotify solicitado: "
-                                f"{action}"
-                            )
-
-                            result = await asyncio.to_thread(
-                                execute_spotify_action,
-                                action,
-                            )
-
-                            print(
-                                "[VOICE-WS] Spotify resultado: "
-                                f"{result}"
-                            )
-
-                        else:
-                            result = {
-                                "ok": False,
-                                "message": (
-                                    "Ferramenta desconhecida: "
-                                    f"{fc.name}"
-                                ),
-                            }
-
-                        function_responses.append(
-                            types.FunctionResponse(
-                                id=fc.id,
-                                name=fc.name,
-                                response={
-                                    "result": result
-                                },
-                            )
-                        )
+                    )
 
                     await session.send_tool_response(
                         function_responses=

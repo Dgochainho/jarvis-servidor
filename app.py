@@ -296,9 +296,35 @@ def callback():
 @app.route("/api/status")
 def api_status():
 
+    # Quanto deste pedido é trabalho nosso (round-trip à API do Spotify) e
+    # quanto é rede até à BOX? Sem separar os dois não dá para saber se uma
+    # resposta lenta é Wi-Fi ou é o Spotify a demorar.
+    started = time.perf_counter()
+
+    # Quem chama pode declarar que tolera um estado ligeiramente antigo.
+    # A BOX não passa nada e recebe sempre dados frescos; o action_service
+    # usa isto nas respostas de voz, onde um nome de faixa com alguns
+    # segundos é indistinguível do actual.
+    try:
+        max_age = float(
+            request.args.get("max_age", 0.0)
+        )
+    except (TypeError, ValueError):
+        max_age = 0.0
+
     data, status_code = (
-        spotify.get_status()
+        spotify.get_status(
+            max_age_seconds=max_age
+        )
     )
+
+    elapsed = time.perf_counter() - started
+
+    if elapsed > 0.5:
+        print(
+            f"[PERF] /api/status: {elapsed:.2f} s do lado do servidor "
+            f"(chamada a Spotify)"
+        )
 
     return (
         jsonify(data),
@@ -312,9 +338,26 @@ def api_status():
 @app.route("/api/cover.rgb565")
 def api_cover():
 
+    # A BOX cronometra este pedido de ponta a ponta e usa-o como teste de
+    # débito. Mas o tempo dela inclui trabalho nosso que nada tem a ver com
+    # Wi-Fi: uma chamada à API do Spotify, mais o download da imagem ao CDN
+    # e a conversão para RGB565 sempre que a capa é nova — e é sempre nova,
+    # senão a BOX não a pediria.
+    #
+    # Sem esta medição, o número da BOX não distingue rede lenta de
+    # servidor lento.
+    request_started = time.perf_counter()
+
+    # A BOX pede a capa poucas décimas de segundo depois de receber o
+    # polling que lhe deu este mesmo URL. Repetir a chamada ao Spotify
+    # custava 1,1 a 1,5 s para obter uma resposta que acabámos de ter.
     status, status_code = (
-        spotify.get_status()
+        spotify.get_status(
+            max_age_seconds=3.0
+        )
     )
+
+    spotify_seconds = time.perf_counter() - request_started
 
     if status_code != 200:
 
@@ -348,6 +391,8 @@ def api_cover():
 
     try:
 
+        convert_started = time.perf_counter()
+
         image_data = (
             cover_service.get_rgb565(
                 cover_url,
@@ -355,6 +400,25 @@ def api_cover():
                 height=120,
             )
         )
+
+        convert_seconds = (
+            time.perf_counter() - convert_started
+        )
+
+        total_seconds = (
+            time.perf_counter() - request_started
+        )
+
+        print()
+        print("[PERF] /api/cover.rgb565")
+        print(f"[PERF]   Estado Spotify:     {spotify_seconds:.2f} s")
+        print(f"[PERF]   CDN + conversao:    {convert_seconds:.2f} s")
+        print(f"[PERF]   Total no servidor:  {total_seconds:.2f} s")
+        print(
+            "[PERF]   (subtrair este total ao tempo medido pela BOX "
+            "para obter o tempo de rede)"
+        )
+        print()
 
     except Exception as error:
 

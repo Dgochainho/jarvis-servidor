@@ -10,6 +10,54 @@ from token_store import (
 )
 
 
+# A BOX mostra a capa a 120x120. Pedir mais do que isso é descarregar
+# pixels para os deitar fora na conversão.
+COVER_TARGET_PX = 120
+
+
+def _pick_cover_url(images):
+    """
+    Escolhe a mais pequena das imagens que ainda chegue para 120x120.
+
+    O código anterior usava images[0]. A documentação do Spotify sugere
+    que o array vem da maior para a menor, mas não encontrei garantia
+    firme disso — e apanhar a maior significava descarregar a versão de
+    640x640 para depois a encolher. Escolher pela largura declarada em
+    vez da posição torna isto independente da ordem.
+
+    Cai para a maior disponível se nenhuma chegar aos 120 px, e para o
+    primeiro URL se o Spotify não declarar larguras.
+    """
+    if not images:
+        return ""
+
+    with_width = [
+        image
+        for image in images
+        if image.get("url") and image.get("width")
+    ]
+
+    if not with_width:
+        return images[0].get("url", "")
+
+    big_enough = [
+        image
+        for image in with_width
+        if image["width"] >= COVER_TARGET_PX
+    ]
+
+    if big_enough:
+        return min(
+            big_enough,
+            key=lambda image: image["width"],
+        )["url"]
+
+    return max(
+        with_width,
+        key=lambda image: image["width"],
+    )["url"]
+
+
 class SpotifyClient:
 
     API_BASE_URL = "https://api.spotify.com/v1"
@@ -38,6 +86,11 @@ class SpotifyClient:
         self.access_token = None
         self.refresh_token = None
         self.token_expires_at = 0
+
+        # Última resposta de get_status e o instante em que foi obtida.
+        # Ver get_status(max_age_seconds=...).
+        self._status_cache = None
+        self._status_cache_at = 0.0
 
 
     # -----------------------------------------------------
@@ -389,7 +442,42 @@ class SpotifyClient:
     # ESTADO ATUAL
     # -----------------------------------------------------
 
-    def get_status(self):
+    def get_status(self, max_age_seconds=0.0):
+        """
+        Estado da reprodução.
+
+        Medido em 2026-09-23: cada chamada custa entre 0,6 e 2,0 s, com
+        mediana ~1,1 s — é uma ida à API do Spotify pela internet. Esse
+        tempo domina três caminhos: o polling da BOX, o download da capa
+        (que chamava isto só para saber o URL da imagem) e a resposta de
+        voz a "o que está a tocar?".
+
+        max_age_seconds diz quanta desactualização o chamador tolera:
+
+            0   sempre fresco (polling da BOX)
+            3   o suficiente para a capa reaproveitar o polling anterior
+            8+  perguntas de voz, onde um nome de faixa com alguns
+                segundos é indistinguível do actual
+
+        Quem precisa de dados frescos continua a pagar o preço; quem não
+        precisa deixa de o pagar.
+        """
+        if (
+            max_age_seconds > 0.0
+            and self._status_cache is not None
+            and (time.time() - self._status_cache_at) <= max_age_seconds
+        ):
+            return self._status_cache
+
+        result = self._fetch_status()
+
+        self._status_cache = result
+        self._status_cache_at = time.time()
+
+        return result
+
+
+    def _fetch_status(self):
 
         response, error = self._request(
             "GET",
@@ -478,15 +566,7 @@ class SpotifyClient:
         )
 
 
-        cover = ""
-
-        if images:
-            cover = (
-                images[0].get(
-                    "url",
-                    ""
-                )
-            )
+        cover = _pick_cover_url(images)
 
 
         device = (
@@ -575,6 +655,16 @@ class SpotifyClient:
             method,
             endpoint,
         )
+
+        # Qualquer comando altera o estado da reprodução, por isso o que
+        # está em cache deixa de valer.
+        #
+        # Sem isto: "Jarvis, passa esta" seguido de "o que está a tocar?"
+        # podia responder com o nome da faixa ANTERIOR, porque a cache
+        # ainda tinha o estado de antes do salto. Um erro que a cache
+        # introduziu e que só aparece na sequência certa de comandos.
+        self._status_cache = None
+        self._status_cache_at = 0.0
 
 
         if response is None:

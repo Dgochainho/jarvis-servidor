@@ -1,14 +1,21 @@
 import asyncio
 import os
 import queue
-import struct
 import threading
 import time
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from action_service import execute_spotify_action
+
+# O que este caminho partilha com o WebSocket persistente vive em
+# jarvis_live.py. Ver o cabeçalho desse módulo para o porquê.
+from jarvis_live import (
+    MODEL,
+    Pcm24kTo16k,
+    build_live_config,
+    dispatch_tool_calls,
+)
 
 
 load_dotenv()
@@ -21,8 +28,6 @@ if not API_KEY:
     )
 
 
-MODEL = "gemini-3.1-flash-live-preview"
-
 INPUT_SAMPLE_RATE = 16000
 INPUT_BYTES_PER_SECOND = INPUT_SAMPLE_RATE * 2
 
@@ -34,57 +39,6 @@ INPUT_CHUNK_BYTES = 3200
 RECEIVE_TIMEOUT_SECONDS = 90
 
 _END = object()
-
-
-class Pcm24kTo16k:
-    """
-    Conversor stateful simples:
-    PCM16 mono 24 kHz -> PCM16 mono 16 kHz.
-
-    A razão é exatamente 3:2:
-    3 amostras de entrada produzem 2 amostras de saída.
-
-    O atributo carry conserva bytes incompletos entre chunks,
-    permitindo converter uma resposta recebida por streaming.
-    """
-
-    def __init__(self):
-        self.carry = b""
-
-    def convert(self, pcm24):
-        data = self.carry + pcm24
-
-        # 3 amostras PCM16 = 6 bytes.
-        usable = (len(data) // 6) * 6
-
-        if usable == 0:
-            self.carry = data
-            return b""
-
-        output = bytearray()
-
-        for offset in range(0, usable, 6):
-            a, b, c = struct.unpack_from(
-                "<hhh",
-                data,
-                offset,
-            )
-
-            # Pontos de saída aproximados nas posições 0 e 1,5.
-            out1 = a
-            out2 = int((int(b) + int(c)) / 2)
-
-            output.extend(
-                struct.pack(
-                    "<hh",
-                    out1,
-                    out2,
-                )
-            )
-
-        self.carry = data[usable:]
-
-        return bytes(output)
 
 
 async def _live_worker(pcm16, output_queue):
@@ -105,78 +59,7 @@ async def _live_worker(pcm16, output_queue):
             api_key=API_KEY
         )
 
-        config = {
-            "response_modalities": ["AUDIO"],
-
-            "tools": [
-                {
-                    "function_declarations": [
-                        {
-                            "name": "spotify_control",
-                            "description": (
-                                "Controla a reprodução Spotify do utilizador. "
-                                "Usa esta função sempre que o utilizador pedir "
-                                "para pausar, retomar, avançar, voltar à música "
-                                "anterior ou perguntar o que está a tocar."
-                            ),
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "action": {
-                                        "type": "string",
-                                        "enum": [
-                                            "pause",
-                                            "resume",
-                                            "next",
-                                            "previous",
-                                            "current_track",
-                                        ],
-                                        "description": (
-                                            "A ação Spotify a executar."
-                                        ),
-                                    }
-                                },
-                                "required": ["action"],
-                            },
-                        }
-                    ]
-                }
-            ],
-
-            "input_audio_transcription": {},
-            "output_audio_transcription": {},
-
-            # A BOX já sabe exatamente onde a fala começa e termina.
-            "realtime_input_config": {
-                "automatic_activity_detection": {
-                    "disabled": True
-                }
-            },
-
-            "system_instruction": {
-                "parts": [
-                    {
-                        "text": (
-                            "És Jarvis, um assistente pessoal de "
-                            "inteligência artificial. "
-                            "Fala em português de Portugal, salvo se "
-                            "o utilizador pedir outra língua. "
-                            "Responde de forma natural e útil. "
-                            "Como estás num assistente de voz, prefere "
-                            "respostas relativamente concisas, exceto "
-                            "quando o utilizador pedir mais detalhe."
-                            "Quando o utilizador pedir para controlar "
-                            "a reprodução Spotify, usa obrigatoriamente "
-                            "a ferramenta spotify_control. "
-                            "Usa-a também quando perguntarem que música "
-                            "está atualmente a tocar. "
-                            "Nunca afirmes que executaste uma ação Spotify "
-                            "sem primeiro chamares a ferramenta."
-                        )
-                    }
-                ]
-            },
-        }
+        config = build_live_config()
 
         print(
             f"[LIVE] A abrir sessão {MODEL}..."
@@ -250,50 +133,12 @@ async def _live_worker(pcm16, output_queue):
                     # -----------------------------------------
 
                     if response.tool_call:
-                        function_responses = []
-
-                        for fc in response.tool_call.function_calls:
-                            print(
-                                f"[LIVE] Tool call: "
-                                f"{fc.name}({fc.args})"
+                        function_responses = (
+                            await dispatch_tool_calls(
+                                response.tool_call,
+                                "[LIVE]",
                             )
-
-                            if fc.name == "spotify_control":
-                                args = dict(fc.args or {})
-
-                                action = args.get("action")
-
-                                # action_service usa requests síncrono.
-                                # Executamo-lo fora do event loop para não
-                                # bloquear a ligação Gemini Live.
-                                result = await asyncio.to_thread(
-                                    execute_spotify_action,
-                                    action,
-                                )
-
-                                print(
-                                    f"[LIVE] Spotify: "
-                                    f"{action} -> {result}"
-                                )
-
-                            else:
-                                result = {
-                                    "ok": False,
-                                    "message": (
-                                        f"Ferramenta desconhecida: "
-                                        f"{fc.name}"
-                                    ),
-                                }
-
-                            function_responses.append(
-                                types.FunctionResponse(
-                                    id=fc.id,
-                                    name=fc.name,
-                                    response={
-                                        "result": result
-                                    },
-                                )
-                            )
+                        )
 
                         await session.send_tool_response(
                             function_responses=
@@ -316,19 +161,33 @@ async def _live_worker(pcm16, output_queue):
                     if content is None:
                         continue
 
+                    # B2, corrigido em 2026-09-26.
+                    #
+                    # O ramo de entrada fazia `if text:` sem nunca atribuir
+                    # `text` — a única atribuição estava no ramo de saída,
+                    # a seguir. Como a primeira transcrição de ENTRADA de
+                    # cada sessão chega antes de o Gemini falar, a primeira
+                    # passagem por aqui levantava UnboundLocalError.
+                    #
+                    # O erro era apanhado pelo except lá em baixo e
+                    # relançado pelo gerador, matando o pedido HTTP sem
+                    # áudio. Ou seja: este caminho de fallback nunca
+                    # funcionou desde que a transcrição de entrada foi
+                    # ligada. Nomes distintos para não voltar a acontecer.
                     if content.input_transcription:
+                        heard = content.input_transcription.text
 
-                        if text:
+                        if heard:
                             print(
-                                f"[LIVE] Tu: {text}"
+                                f"[LIVE] Tu: {heard}"
                             )
 
                     if content.output_transcription:
-                        text = content.output_transcription.text
+                        spoken = content.output_transcription.text
 
-                        if text:
+                        if spoken:
                             print(
-                                f"[LIVE] Jarvis: {text}"
+                                f"[LIVE] Jarvis: {spoken}"
                             )
 
                     if content.model_turn is None:
