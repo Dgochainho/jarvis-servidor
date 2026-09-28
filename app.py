@@ -747,7 +747,32 @@ if __name__ == "__main__":
     mdns_service.start()
 
     try:
-        voice_ws_server.start()
+        # B5: o servidor de voz tem de subir, ou não arrancamos de todo.
+        #
+        # Um sistema com Flask vivo e voz morta é pior do que um sistema
+        # em baixo: o LCD actualiza, os botões funcionam, o /api/status
+        # responde 200 — e nada aponta para a causa. Custou várias horas
+        # a 2026-09-22, com uma instância zombie a segurar a 8765
+        # enquanto a nova servia a 8888.
+        try:
+            voice_ws_server.start()
+
+        except Exception as erro:
+            print()
+            print("==============================")
+            print("ARRANQUE ABORTADO")
+            print("==============================")
+            print()
+            print(f"O servidor de voz não subiu: {erro}")
+            print()
+            print(
+                "O Flask NÃO vai arrancar. Sem voz, este serviço não "
+                "tem razão de existir, e um arranque parcial só torna "
+                "o problema mais difícil de encontrar."
+            )
+            print()
+
+            raise SystemExit(1) from erro
 
         app.run(
             host="0.0.0.0",

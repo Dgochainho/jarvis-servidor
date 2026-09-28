@@ -238,10 +238,25 @@ class LiveVoiceWebSocketServer:
         if (
             loop is not None
             and stop_event is not None
+            and not loop.is_closed()
         ):
-            loop.call_soon_threadsafe(
-                stop_event.set
-            )
+            try:
+                loop.call_soon_threadsafe(
+                    stop_event.set
+                )
+
+            except RuntimeError:
+                # O loop fechou entre a verificação e a chamada. Acontece
+                # quando o arranque falhou: o asyncio.run() já desmontou
+                # tudo antes de alguém chamar stop().
+                #
+                # Isto não é um pormenor. O stop() é chamado no finally do
+                # app.py, logo a seguir a um arranque falhado — e sem esta
+                # protecção levantava "Event loop is closed", que
+                # substituía a mensagem do erro verdadeiro por outra que
+                # não tem nada a ver. O diagnóstico do B5 ficava a apontar
+                # para o sítio errado.
+                pass
 
         thread = self._thread
 
@@ -266,55 +281,106 @@ class LiveVoiceWebSocketServer:
             )
 
         except BaseException as exc:
+            # A ORDEM IMPORTA. O erro é registado ANTES de levantar o
+            # evento, porque é o evento que liberta a thread principal
+            # dentro de start(), e essa lê o _startup_error logo a seguir.
+            #
+            # Era aqui o bug B5: o _run_server tinha um except próprio que
+            # levantava o evento e só depois deixava a excepção subir até
+            # aqui. Entre uma coisa e outra havia o desmantelamento do
+            # asyncio.run() — milissegundos, não nanossegundos. Se a thread
+            # principal ganhasse a corrida, lia _startup_error a None,
+            # concluía que tinha corrido bem, e o Flask arrancava sem voz
+            # nenhuma.
+            #
+            # Intermitente por natureza, que é o pior tipo de bug para
+            # diagnosticar. Custou várias horas a 2026-09-22.
             self._startup_error = exc
-            self._started.set()
 
             print(
                 "[VOICE-WS] ERRO fatal: "
                 f"{self._format_exception(exc)}"
             )
 
+            if self._is_port_in_use(exc):
+                print()
+                print(
+                    f"[VOICE-WS] A porta {self.port} já está ocupada."
+                )
+                print(
+                    "[VOICE-WS] Quase de certeza é uma instância "
+                    "anterior do app.py que ficou viva."
+                )
+                print(
+                    "[VOICE-WS] Em PowerShell: "
+                    f"Get-NetTCPConnection -LocalPort {self.port} | "
+                    "Select-Object OwningProcess"
+                )
+                print()
+
+        finally:
+            # Sempre — mesmo que o registo do erro acima falhe. Sem isto,
+            # start() ficava pendurado até ao timeout de 10 s.
+            self._started.set()
+
+    @staticmethod
+    def _is_port_in_use(exc: BaseException) -> bool:
+        """
+        Reconhece "endereço já em uso" nas duas plataformas.
+
+        errno 98 em Linux, 10048 em Windows (WSAEADDRINUSE).
+        """
+        while exc is not None:
+            if isinstance(exc, OSError) and exc.errno in (98, 10048):
+                return True
+
+            exc = exc.__cause__ or exc.__context__
+
+        return False
+
     async def _run_server(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
         self._connection_lock = asyncio.Lock()
 
-        try:
-            async with serve(
-                self._handle_connection,
-                self.host,
-                self.port,
-                compression=None,
-                max_size=64 * 1024,
+        # Sem try/except aqui de propósito.
+        #
+        # Havia um, que levantava o _started em caso de erro e só depois
+        # deixava a excepção subir. Era a metade de cima do B5: criava uma
+        # janela em que start() já tinha sido libertado mas o erro ainda
+        # não tinha sido registado. Quem trata da falha é o _thread_main,
+        # que regista primeiro e levanta o evento depois.
+        async with serve(
+            self._handle_connection,
+            self.host,
+            self.port,
+            compression=None,
+            max_size=64 * 1024,
 
-                # A BOX envia frames de 512 bytes a ~62,5 frames/s.
-                # 1024 posições cobrem mais do que o máximo de 12 s.
-                max_queue=1024,
+            # A BOX envia frames de 512 bytes a ~62,5 frames/s.
+            # 1024 posições cobrem mais do que o máximo de 12 s.
+            max_queue=1024,
 
-                write_limit=64 * 1024,
-                ping_interval=20,
-                ping_timeout=20,
-                close_timeout=5,
-            ):
-                print()
-                print(
-                    "[VOICE-WS] ====================================="
-                )
-                print(
-                    f"[VOICE-WS] Persistente em "
-                    f"ws://{self.host}:{self.port}{VOICE_WS_PATH}"
-                )
-                print(
-                    "[VOICE-WS] ====================================="
-                )
-                print()
+            write_limit=64 * 1024,
+            ping_interval=20,
+            ping_timeout=20,
+            close_timeout=5,
+        ):
+            print()
+            print(
+                "[VOICE-WS] ====================================="
+            )
+            print(
+                f"[VOICE-WS] Persistente em "
+                f"ws://{self.host}:{self.port}{VOICE_WS_PATH}"
+            )
+            print(
+                "[VOICE-WS] ====================================="
+            )
+            print()
 
-                self._started.set()
-                await self._stop_event.wait()
-
-        except BaseException:
             self._started.set()
-            raise
+            await self._stop_event.wait()
 
     async def _handle_connection(
         self,
