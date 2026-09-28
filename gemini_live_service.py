@@ -67,6 +67,7 @@ async def _live_worker(pcm16, output_queue):
         "bytes_out": 0,
         "t_primeiro_audio": None,
         "t_ferramentas": 0.0,
+        "fecho": False,
     }
 
     try:
@@ -164,6 +165,12 @@ async def _live_worker(pcm16, output_queue):
                         )
 
                         turno["ferramentas"].extend(registos)
+
+                        if any(
+                            r.get("nome") == "end_conversation"
+                            for r in registos
+                        ):
+                            turno["fecho"] = True
 
                         await session.send_tool_response(
                             function_responses=
@@ -273,9 +280,13 @@ async def _live_worker(pcm16, output_queue):
                         )
 
             if first_audio:
-                raise RuntimeError(
-                    "Gemini Live terminou sem devolver áudio"
-                )
+                # Ver a nota equivalente em live_voice_ws_server.py:
+                # um turno que só fecha a conversa não tem áudio, e
+                # isso não é falha.
+                if not turno["fecho"]:
+                    raise RuntimeError(
+                        "Gemini Live terminou sem devolver áudio"
+                    )
 
             print(
                 f"[LIVE] Resposta terminada | "
@@ -315,6 +326,7 @@ async def _live_worker(pcm16, output_queue):
             "resultado": turno["resultado"],
             "erro": turno["erro"],
             "fallback": True,
+            "fecho_por_voz": turno["fecho"],
 
             "t_fala": segundos(len(pcm16) / INPUT_BYTES_PER_SECOND),
             "t_primeiro_audio": segundos(turno["t_primeiro_audio"]),

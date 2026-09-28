@@ -117,13 +117,32 @@ SPOTIFY_CONTROL_DECLARATION = {
 }
 
 
-# Fase 1.4 — fecho de conversa por voz.
-# Acrescentar aqui a declaração `end_conversation` e tratá-la em
-# dispatch_tool_calls. Ver claude/Fase_1-2_Consolidar_Live.md.
+END_CONVERSATION_DECLARATION = {
+    "name": "end_conversation",
+
+    "description": (
+        "Termina a conversa e liberta o microfone. Chama esta função "
+        "quando o utilizador se despedir ou indicar que não precisa de "
+        "mais nada — por exemplo 'obrigado, é tudo', 'já chega', "
+        "'adeus', 'podes ir', 'fica bem'. "
+
+        "Despede-te numa frase curta antes de a chamar. "
+
+        "NÃO a chames se o utilizador estiver apenas a agradecer no meio "
+        "da conversa, como em 'obrigado por teres posto essa música' ou "
+        "'obrigado, e agora diz-me...' — nesses casos ele quer continuar."
+    ),
+
+    "parameters": {
+        "type": "object",
+        "properties": {},
+    },
+}
 
 
 FUNCTION_DECLARATIONS = [
     SPOTIFY_CONTROL_DECLARATION,
+    END_CONVERSATION_DECLARATION,
 ]
 
 
@@ -147,7 +166,12 @@ SYSTEM_INSTRUCTION = (
     "responde verbalmente. "
 
     "Nunca digas que uma ação Spotify foi executada sem teres "
-    "recebido sucesso da ferramenta."
+    "recebido sucesso da ferramenta. "
+
+    "Quando o utilizador se despedir ou disser que não precisa de mais "
+    "nada, despede-te numa frase curta e chama a ferramenta "
+    "end_conversation. Um agradecimento a meio da conversa não é uma "
+    "despedida."
 )
 
 
@@ -233,6 +257,20 @@ async def dispatch_tool_calls(tool_call, log_prefix):
             )
 
             print(f"{log_prefix} Spotify: {action} -> {result}")
+
+        elif fc.name == "end_conversation":
+            # Aqui não se faz nada além de confirmar. Quem encerra é o
+            # servidor WebSocket, e só DEPOIS de todo o áudio da despedida
+            # ter sido enviado — ver a nota em _run_turn.
+            #
+            # Encerrar neste ponto rearmaria o Jarvis a meio da frase, e
+            # sem AEC o WakeNet ouviria a própria voz da BOX.
+            result = {
+                "ok": True,
+                "message": "Conversa terminada.",
+            }
+
+            print(f"{log_prefix} Fecho de conversa pedido por voz")
 
         else:
             result = {

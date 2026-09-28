@@ -174,7 +174,7 @@ local. É também o mais fácil de dar por passado sem o ser: se a BOX recuperar
 por outro caminho (por exemplo `Nao foi possivel armar Live`), o timeout **não**
 foi exercitado e o resultado é inconclusivo, não `OK`. Procurar a linha exacta.
 
-### T18 · Fecho por voz *(Fase 1.4 — ainda não implementado)*
+### T18 · Fecho por voz
 Fazer uma pergunta normal, ouvir a resposta e dizer **"obrigado, é tudo"**.
 
 **Esperado:** o Jarvis despede-se, a despedida toca **inteira**, e o log mostra
@@ -182,11 +182,11 @@ Fazer uma pergunta normal, ouvir a resposta e dizer **"obrigado, é tudo"**.
 acordar imediatamente, sem esperar os 30 s.
 **Falha se:** a BOX rearmar antes de a despedida acabar de tocar.
 
-### T19 · Falso positivo de despedida *(Fase 1.4)*
+### T19 · Falso positivo de despedida
 Dizer **"obrigado por teres posto essa música"**.
 
 **Esperado:** a conversa **não** termina.
-**Critério de aceitação da Fase 1.4.**
+**Falha se:** o `end_conversation` aparecer no log deste turno.
 
 ### T20 · Fallback HTTP sem a BOX
 Com o `app.py` a correr, na pasta do servidor:
@@ -204,6 +204,22 @@ Este teste existe porque o caminho HTTP só corre no firmware quando a sessão
 WebSocket **nunca chega a armar** (`voice.c`, l. 1627-1647), o que é raro e
 difícil de provocar à mão. Foi por isso que o B2 sobreviveu meses sem ninguém
 dar por ele: o ramo estava sempre a rebentar, mas quase nunca era chamado.
+
+### T21 · Fecho por voz sem áudio ⚠️
+
+O Gemini nem sempre despede-se e fecha no mesmo turno: por vezes diz "Até à
+próxima!" num turno e chama o `end_conversation` no turno seguinte, que então
+não tem áudio nenhum.
+
+Difícil de provocar à vontade. Verifica-se **a posteriori**, no registo: procurar
+turnos com `end_conversation` e `1.º áudio —`.
+
+**Esperado:** `resultado: done`, e no log
+`Fecho por voz sem áudio: a despedida foi no turno anterior`.
+**Falha se:** `RuntimeError: Gemini Live terminou sem devolver áudio`. Era o
+comportamento até 2026-09-27: a conversa acabava pelo caminho do erro em vez do
+caminho do fecho. Funcionava por acidente, porque a BOX também rearma com
+`ERROR`.
 
 ---
 
@@ -272,3 +288,56 @@ portão de privacidade.
 
 Guardar o `log-servidor.txt` e o output do monitor de cada execução numa pasta
 `testes/<data>/`. É o que permite comparar dois dias diferentes.
+
+---
+
+## Baseline 2 — 2026-09-27
+
+Firmware `543f6ae` · Servidor: Fases 1.2, 1.3 e 1.4
+Medido com `python ver_turnos.py` sobre 32 turnos reais.
+
+### Latência
+
+```
+                                total    modelo    n
+  1.º turno (abre sessão)      3.53 s    2.95 s    5
+  follow-up (reutiliza)        1.10 s    1.09 s    22
+```
+
+Contra a Baseline 1 (2,7–4,9 s e 1,0–1,2 s): **sem regressão**. A reutilização
+da sessão Gemini vale ~2,4 s por turno e continua a ser o número a proteger.
+
+A coluna `modelo` desconta o tempo passado dentro das ferramentas (mediana
+0,82 s). Sem essa separação, um turno com `spotify_control` e outro sem
+ferramenta não são comparáveis — foi o erro de medição cometido na 1.3.
+
+### Resultados
+
+| Teste | Estado |
+|---|---|
+| T01–T08, T10, T11 | OK |
+| T09 | **OK** — corrigido na Fase 1.1 |
+| T14, T15 | falha esperada (Fase 2) |
+| T16 | OK |
+| T17 | por repetir em condições — ver a nota do próprio teste |
+| T18 | **OK** — `"Não, obrigado. É tudo."` fechou a conversa |
+| T19 | **OK** — `"Obrigado por teres passado a música."` **não** fechou |
+| T20 | OK — 166 400 e 182 420 bytes em duas execuções |
+| T21 | **FALHOU e foi corrigido** na mesma sessão |
+| T12, T13 | ver abaixo |
+
+### T12/T13 — mediu-se sem se ter medido de propósito
+
+O registo de turnos deu o primeiro número do problema F3/3.2:
+
+**5 dos 27 turnos concluídos (19%) correram até ao fim sem o Gemini transcrever
+nada.** Ninguém falou; o VAD disparou sozinho e, em follow-up, o WakeNet está
+desligado.
+
+Pormenor que aponta para a causa: a transcrição `"¿Qué es esto?"` aparece
+**duas vezes**, em sessões separadas (14:08:15 e 17:51:08). Ruído ambiente
+aleatório não produz duas vezes a mesma transcrição. É mais compatível com uma
+fonte acústica repetida — provavelmente a cauda da própria voz da BOX, que sem
+AEC não há nada a filtrar.
+
+Isto passa a ser o critério de aceitação da Fase 3.2: **19%, medido.**

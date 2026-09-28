@@ -160,6 +160,16 @@ def resumo(turnos):
     concluidos = [t for t in turnos if t.get("resultado") == "done"]
     fantasma = [t for t in concluidos if sem_fala(t)]
 
+    # Fase 1.4: quantas conversas acabaram porque o utilizador disse que
+    # acabou, em vez de expirarem com 30 s de microfone aberto. É a
+    # contrapartida directa da secção acima.
+    fechos = [t for t in turnos if t.get("fecho_por_voz")]
+
+    if fechos:
+        print("Fechos de conversa por voz")
+        print(f"  {len(fechos)} conversa(s) terminada(s) a pedido")
+        print()
+
     if concluidos:
         print("Turnos sem fala reconhecida")
         print(

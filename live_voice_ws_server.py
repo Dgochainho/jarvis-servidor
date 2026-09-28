@@ -84,6 +84,9 @@ class TurnStats:
     tools: list = field(default_factory=list)
     tool_seconds: float = 0.0
 
+    # O Gemini chamou end_conversation neste turno (Fase 1.4).
+    end_requested: bool = False
+
     @property
     def pcm_duration_seconds(self) -> float:
         return self.bytes_received / INPUT_BYTES_PER_SECOND
@@ -502,6 +505,16 @@ class LiveVoiceWebSocketServer:
                             turno_numero=turn_number,
                         )
 
+                        if result == "encerrada":
+                            # O utilizador despediu-se. A conversa acabou
+                            # bem; o SLEEP já foi enviado pelo _run_turn.
+                            print(
+                                "[VOICE-WS] Conversa terminada a pedido "
+                                "do utilizador"
+                            )
+
+                            return "done"
+
                         if result != "done":
                             return result
 
@@ -683,10 +696,31 @@ class LiveVoiceWebSocketServer:
                     f"{gemini_result!r}"
                 )
 
+            # Fase 1.4 — fecho de conversa por voz.
+            #
+            # O SLEEP vai aqui, e não no momento em que o Gemini chamou a
+            # ferramenta, porque a esta altura todo o áudio da despedida já
+            # foi entregue ao websocket. A BOX trata o SLEEP levantando
+            # bandeiras (voice.c l. 820-835) e só transita de estado depois
+            # do DONE, que é quem esvazia o altifalante — logo a despedida
+            # toca inteira antes de o Jarvis rearmar.
+            #
+            # É a mesma sequência do cancelamento desde a 1.1: DONE
+            # significa "o turno acabou", SLEEP significa "a conversa
+            # acabou". Por isto, o firmware não precisou de uma linha.
+            if stats.end_requested:
+                await websocket.send("SLEEP")
+
+                print(
+                    "[VOICE-WS] Fecho por voz: SLEEP enviado "
+                    "depois da despedida"
+                )
+
             await websocket.send("DONE")
 
             resultado = "done"
-            return "done"
+
+            return "encerrada" if stats.end_requested else "done"
 
         except BaseException as exc:
             # Inclui asyncio.CancelledError de propósito: um turno
@@ -735,6 +769,7 @@ class LiveVoiceWebSocketServer:
             "resultado": resultado,
             "erro": erro,
             "fallback": False,
+            "fecho_por_voz": stats.end_requested,
 
             "t_wake_start": segundos(stats.wake_to_start_seconds),
             "t_fala": segundos(stats.pcm_duration_seconds),
@@ -937,6 +972,15 @@ class LiveVoiceWebSocketServer:
 
                     stats.tools.extend(registos)
 
+                    # Só levanta a bandeira. O encerramento acontece no
+                    # fim do turno, depois de a despedida ter sido toda
+                    # enviada.
+                    if any(
+                        r.get("nome") == "end_conversation"
+                        for r in registos
+                    ):
+                        stats.end_requested = True
+
                     await session.send_tool_response(
                         function_responses=
                             function_responses
@@ -1037,8 +1081,27 @@ class LiveVoiceWebSocketServer:
                         )
 
         if first_audio:
-            raise RuntimeError(
-                "Gemini Live terminou sem devolver áudio"
+            # Um turno sem áudio é normalmente uma falha. Há uma excepção,
+            # e foi medida em campo em 2026-09-27:
+            #
+            # O Gemini nem sempre despede-se e fecha no mesmo turno. Às
+            # vezes despede-se num turno ("Até à próxima!") e chama o
+            # end_conversation no turno seguinte — que então não tem áudio
+            # nenhum, porque já não há nada a dizer.
+            #
+            # Antes disto, esse turno rebentava com "terminou sem devolver
+            # áudio" e a conversa acabava pelo caminho do erro em vez do
+            # caminho do fecho. Funcionava por acidente (a BOX também
+            # rearma com ERROR), mas o utilizador via um erro no log de
+            # uma coisa que correu exactamente como devia.
+            if not stats.end_requested:
+                raise RuntimeError(
+                    "Gemini Live terminou sem devolver áudio"
+                )
+
+            print(
+                "[VOICE-WS] Fecho por voz sem áudio: "
+                "a despedida foi no turno anterior"
             )
 
         print(
