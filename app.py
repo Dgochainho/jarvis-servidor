@@ -24,11 +24,6 @@ from live_voice_ws_server import LiveVoiceWebSocketServer
 
 from dotenv import load_dotenv
 
-from transcription_service import transcribe_audio
-from intent_service import understand_command
-from action_service import execute_intent
-#from voice_understanding_service import understand_audio
-from local_intent_service import understand_command_local
 
 
 
@@ -77,8 +72,10 @@ SCOPES = [
 
 app = Flask(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent
-VOICE_WAV_PATH = BASE_DIR / "command.wav"
+# (Havia aqui uma segunda definição de BASE_DIR, que só existia para
+# construir o caminho do command.wav. O WAV desapareceu com o ramo de
+# transcrição; o BASE_DIR verdadeiro está mais acima, junto ao
+# TOKEN_FILE.)
 
 
 spotify = SpotifyClient(
@@ -514,8 +511,6 @@ def api_previous():
 
 @app.post("/api/voice")
 def api_voice():
-    request_start = time.perf_counter()
-
     pcm_data = request.get_data(cache=False)
 
     if not pcm_data:
@@ -539,139 +534,54 @@ def api_voice():
             "error": "Audio demasiado grande"
         }), 413
 
-    try:
-        with wave.open(str(VOICE_WAV_PATH), "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)      # 16-bit = 2 bytes
-            wav_file.setframerate(16000)
-            wav_file.writeframes(pcm_data)
-
-    except Exception as exc:
-        print(f"[VOICE] Erro ao criar WAV: {exc}")
-
+    # O ramo de interpretação por texto foi removido em 2026-09-30.
+    #
+    # Era: gravar WAV -> transcribe_audio -> understand_command_local ->
+    # understand_command -> execute_intent. Nada disso era alcançável: a BOX
+    # põe sempre o cabeçalho X-Response-Audio: pcm16 (voice.c l. 1490), e a
+    # verificação abaixo devolvia antes de lá chegar.
+    #
+    # Foi assim que o intent_service acabou com 8 acções e a ferramenta do
+    # Gemini com 5. Não divergiram por descuido — divergiram porque metade do
+    # código deixou de correr e ninguém deu por isso.
+    #
+    # O WAV também desapareceu: só servia de entrada à transcrição.
+    #
+    # Este endpoint existe agora para uma coisa só: o fallback HTTP, para
+    # quando o WebSocket Live não chega a armar.
+    if request.headers.get("X-Response-Audio") != "pcm16":
         return jsonify({
             "ok": False,
-            "error": str(exc)
-        }), 500
-    
-    try:
-        if request.headers.get("X-Response-Audio") == "pcm16":
+            "error": (
+                "Este endpoint só serve o fallback Live. "
+                "Falta o cabeçalho X-Response-Audio: pcm16."
+            ),
+        }), 400
 
-            print()
-            print("[LIVE] ===============================")
-            print("[LIVE] Modo Gemini Live")
-            print("[LIVE] Audio BOX -> Gemini -> BOX")
-            print("[LIVE] ===============================")
-            print()
+    print()
+    print("[LIVE] ===============================")
+    print("[LIVE] Modo Gemini Live (fallback HTTP)")
+    print("[LIVE] Audio BOX -> Gemini -> BOX")
+    print(f"[LIVE] {len(pcm_data)} bytes | "
+          f"{len(pcm_data) / 32000.0:.2f} s de fala")
+    print("[LIVE] ===============================")
+    print()
 
-            return Response(
-                stream_with_context(
-                    stream_gemini_live_reply(
-                        pcm_data
-                    )
-                ),
-                status=200,
-                mimetype="application/octet-stream",
-                headers={
-                    "X-Audio-Sample-Rate": "16000",
-                    "X-Audio-Channels": "1",
-                    "X-Audio-Bits": "16",
-                },
+    return Response(
+        stream_with_context(
+            stream_gemini_live_reply(
+                pcm_data
             )
+        ),
+        status=200,
+        mimetype="application/octet-stream",
+        headers={
+            "X-Audio-Sample-Rate": "16000",
+            "X-Audio-Channels": "1",
+            "X-Audio-Bits": "16",
+        },
+    )
 
-
-        transcribe_start = time.perf_counter()
-
-        transcript = transcribe_audio(
-            VOICE_WAV_PATH
-        )
-
-        transcribe_time = time.perf_counter() - transcribe_start
-
-
-        intent_start = time.perf_counter()
-
-        intent = understand_command_local(
-            transcript
-        )
-
-        used_llm_for_intent = False
-
-        if intent is None:
-            used_llm_for_intent = True
-
-            intent = understand_command(
-                transcript
-            )
-
-        intent_time = time.perf_counter() - intent_start
-
-        print()
-        print("[JARVIS] ===============================")
-        print(f"[JARVIS] Acao: {intent.action}")
-        print(f"[JARVIS] Query: {intent.query}")
-        print(f"[JARVIS] Volume: {intent.volume_percent}")
-        print("[JARVIS] ===============================")
-        print()
-
-        spotify_start = time.perf_counter()
-
-        execution = execute_intent(intent)
-
-        spotify_time = time.perf_counter() - spotify_start
-
-        print()
-        print("[JARVIS] ===============================")
-        print(f"[JARVIS] Executado: {execution['ok']}")
-        print(f"[JARVIS] Resposta: {execution['message']}")
-        print("[JARVIS] ===============================")
-        print()
-
-    except Exception as exc:
-        print(f"[VOICE] Erro na transcricao Gemini: {exc}")
-
-        return jsonify({
-            "ok": False,
-            "error": f"Erro na transcricao: {exc}"
-        }), 500
-
-
-
-
-
-    duration_seconds = len(pcm_data) / 32000.0
-
-    print()
-    print("[VOICE] ===============================")
-    print("[VOICE] Audio recebido da BOX")
-    print(f"[VOICE] Bytes: {len(pcm_data)}")
-    print(f"[VOICE] Duracao: {duration_seconds:.2f} s")
-    print(f"[VOICE] WAV: {VOICE_WAV_PATH}")
-    print("[VOICE] ===============================")
-    print()
-
-
-    total_time = time.perf_counter() - request_start
-
-    print()
-    print("[PERF] =================================")
-    print(f"[PERF] Transcricao:        {transcribe_time:.2f} s")
-    print(f"[PERF] Interpretacao:      {intent_time:.3f} s")
-    print(f"[PERF] Intent usou Gemini: {used_llm_for_intent}")
-    print(f"[PERF] Spotify:            {spotify_time:.2f} s")
-    print(f"[PERF] Total servidor:     {total_time:.2f} s")
-    print("[PERF] =================================")
-    print()
-
-    return jsonify({
-        "ok": True,
-        "bytes": len(pcm_data),
-        "duration_seconds": round(duration_seconds, 2),
-        "file": "command.wav",
-        "transcript": transcript,
-        "intent": intent.model_dump(),
-        "execution": execution
-    })
 
 # ---------------------------------------------------------
 # ARRANQUE

@@ -87,6 +87,10 @@ class TurnStats:
     # O Gemini chamou end_conversation neste turno (Fase 1.4).
     end_requested: bool = False
 
+    # Segundos entre o fim do turno anterior e o WAKE deste. None no
+    # primeiro turno de cada conversa.
+    desde_turno_anterior: Optional[float] = None
+
     @property
     def pcm_duration_seconds(self) -> float:
         return self.bytes_received / INPUT_BYTES_PER_SECOND
@@ -338,10 +342,54 @@ class LiveVoiceWebSocketServer:
 
         return False
 
+    async def _monitor_atraso_loop(self) -> None:
+        """
+        Vigia o event loop e queixa-se quando ele fica bloqueado.
+
+        Porquê: a BOX envia PCM em tempo real. Se este loop parar, ninguém
+        lê o socket, a janela TCP enche, e o envio na BOX estoira o
+        timeout — que é exactamente o `transport_poll_write(0)` seguido de
+        `Envio PCM bloqueado durante 5028 ms` que aparece no monitor.
+
+        Do lado da BOX isso é indistinguível de rede má. Não é: o servidor
+        é que parou. Este aviso separa as duas coisas de uma vez por todas.
+
+        Suspeitos, por ordem de probabilidade:
+          - a consola do Windows em modo QuickEdit: basta seleccionar
+            texto na janela para o processo bloquear no print seguinte
+          - escrita em disco lenta
+          - alguma chamada síncrona que escapou ao asyncio.to_thread
+        """
+        INTERVALO = 0.5
+        LIMITE = 1.0
+
+        while True:
+            antes = time.perf_counter()
+
+            await asyncio.sleep(INTERVALO)
+
+            atraso = time.perf_counter() - antes - INTERVALO
+
+            if atraso >= LIMITE:
+                print(
+                    f"[VOICE-WS] AVISO: event loop bloqueado "
+                    f"{atraso:.1f} s. A BOX não conseguiu enviar áudio "
+                    f"durante esse tempo."
+                )
+                print(
+                    "[VOICE-WS]   Se estiveres a seleccionar texto nesta "
+                    "janela, é essa a causa (QuickEdit)."
+                )
+
     async def _run_server(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
         self._connection_lock = asyncio.Lock()
+
+        monitor = asyncio.create_task(
+            self._monitor_atraso_loop(),
+            name="monitor-atraso-loop",
+        )
 
         # Sem try/except aqui de propósito.
         #
@@ -380,7 +428,12 @@ class LiveVoiceWebSocketServer:
             print()
 
             self._started.set()
-            await self._stop_event.wait()
+
+            try:
+                await self._stop_event.wait()
+
+            finally:
+                monitor.cancel()
 
     async def _handle_connection(
         self,
@@ -557,6 +610,7 @@ class LiveVoiceWebSocketServer:
                     )
 
                     turn_number = 1
+                    fim_turno_anterior = None
 
                     while True:
                         print(
@@ -569,7 +623,10 @@ class LiveVoiceWebSocketServer:
                             session,
                             conversa_id=conversa_id,
                             turno_numero=turn_number,
+                            fim_turno_anterior=fim_turno_anterior,
                         )
+
+                        fim_turno_anterior = time.perf_counter()
 
                         if result == "encerrada":
                             # O utilizador despediu-se. A conversa acabou
@@ -682,6 +739,7 @@ class LiveVoiceWebSocketServer:
         session,
         conversa_id: str = "",
         turno_numero: int = 0,
+        fim_turno_anterior: Optional[float] = None,
     ) -> str:
         # 12 s / 16 ms por frame = 750 frames, mais os controlos.
         input_queue: asyncio.Queue = asyncio.Queue(
@@ -691,6 +749,22 @@ class LiveVoiceWebSocketServer:
         stats = TurnStats(
             wake_received_at=time.perf_counter()
         )
+
+        # Quanto tempo passou entre o fim do turno anterior e este WAKE.
+        #
+        # Só faz sentido em follow-up, e existe para uma pergunta: os
+        # turnos que ninguém iniciou aparecem logo a seguir à resposta —
+        # o que apontaria para a BOX se ouvir a si própria — ou muito
+        # depois, o que aponta para outra coisa qualquer?
+        #
+        # Isto vive AQUI, e não na BOX, porque a BOX não sabe distinguir
+        # um follow-up legítimo de um fantasma. Quem sabe é o servidor,
+        # que vê a transcrição. Medir na BOX era medir todos os
+        # follow-ups juntos e não poder separá-los depois.
+        if fim_turno_anterior is not None:
+            stats.desde_turno_anterior = (
+                stats.wake_received_at - fim_turno_anterior
+            )
 
         receiver_task = asyncio.create_task(
             self._receive_turn_input(
@@ -793,6 +867,20 @@ class LiveVoiceWebSocketServer:
             # interrompido também é informação, e é o caso que hoje
             # desaparece sem deixar rasto.
             erro_descricao = self._format_exception(exc)
+
+            # A BOX desligou-se antes de dizer o que quer que fosse.
+            #
+            # Acontece sempre que a gravas com firmware novo, ou lhe tiras
+            # a ficha: o WAKE tinha ficado pendente da sessão anterior e a
+            # ligação morre sem close frame. Não é uma falha do sistema, e
+            # contá-la como erro estraga a estatística — três "erros" num
+            # dia de trabalho em que dois eram reinícios teus.
+            if (
+                isinstance(exc, ConnectionClosed)
+                and stats.start_received_at is None
+            ):
+                resultado = "desligado"
+
             raise
 
         finally:
@@ -837,6 +925,7 @@ class LiveVoiceWebSocketServer:
             "fallback": False,
             "fecho_por_voz": stats.end_requested,
 
+            "t_desde_anterior": segundos(stats.desde_turno_anterior),
             "t_wake_start": segundos(stats.wake_to_start_seconds),
             "t_fala": segundos(stats.pcm_duration_seconds),
             "t_receber": segundos(stats.receive_wall_seconds),

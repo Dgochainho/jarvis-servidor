@@ -12,7 +12,30 @@ Correr antes de cada fase e depois de cada fase. Registar no fim do ficheiro.
 **Servidor** (PowerShell, na pasta `spotify-service`):
 
 ```powershell
-python app.py 2>&1 | Tee-Object -FilePath "log-servidor.txt"
+.\iniciar-servidor.ps1
+```
+
+⚠️ **Não correr o `app.py` com a saída para o terminal.** Medido em
+2026-09-30: com a saída na consola, o processo bloqueia à espera que o
+terminal aceite o texto, ninguém lê o WebSocket, e a BOX estoira o timeout
+de envio de PCM. Aparece no monitor como
+
+```
+transport_ws: Error transport_poll_write(0)
+VOICE: Envio PCM bloqueado durante 5028 ms
+VOICE: Nao foi possivel concluir a interacao de voz
+```
+
+— que parece rede má e não é. Com a saída em ficheiro: zero falhas.
+
+O comando anterior deste guião (`python app.py 2>&1 | Tee-Object ...`) tinha
+exactamente este defeito, porque o `Tee-Object` também escreve na consola.
+**A Baseline 1 e a Baseline 2 foram medidas nessas condições.**
+
+Para acompanhar o servidor enquanto corre, noutro separador:
+
+```powershell
+Get-Content log-servidor.txt -Wait -Tail 20
 ```
 
 **BOX** (PowerShell, na pasta do firmware):

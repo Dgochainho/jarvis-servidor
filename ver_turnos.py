@@ -1,9 +1,15 @@
 """
 Resumo do registo de turnos.
 
-    python ver_turnos.py              resumo de tudo
-    python ver_turnos.py 20           só os últimos 20 turnos
-    python ver_turnos.py --lista      lista turno a turno
+    python ver_turnos.py                    resumo de tudo
+    python ver_turnos.py 20                 só os últimos 20 turnos
+    python ver_turnos.py --desde 2026-09-30 só a partir dessa data
+    python ver_turnos.py --lista            lista turno a turno
+
+O --desde existe porque a pergunta que aparece sempre é "isto melhorou
+depois da alteração de ontem?", e um resumo que mistura antes e depois
+não responde a isso. Misturar diluiu durante dois dias um problema que
+tinha desaparecido.
 
 Existe porque ter os dados e não os olhar dá no mesmo. Responde de uma vez
 às perguntas que estavam em aberto:
@@ -138,6 +144,66 @@ def resumo(turnos):
     print()
 
     # -----------------------------------------------------------------
+    # A CAUDA — o que a mediana esconde
+    # -----------------------------------------------------------------
+    #
+    # Uma mediana de 1,10 s convive perfeitamente com um turno de 26 s.
+    # Quem espera 26 segundos não se consola com a mediana, e um sistema
+    # que falha assim de vez em quando é pior de usar do que um que seja
+    # lento de forma previsível.
+    #
+    # Por isso a cauda tem secção própria, com a decomposição: um turno
+    # lento por causa do Spotify e um turno lento por causa do Gemini são
+    # problemas diferentes e têm correcções diferentes.
+    LIMITE_LENTO = 5.0
+
+    lentos = sorted(
+        (
+            t for t in turnos
+            if (t.get("t_primeiro_audio") or 0) >= LIMITE_LENTO
+        ),
+        key=lambda t: -t["t_primeiro_audio"],
+    )
+
+    medidos = [
+        t for t in turnos
+        if t.get("t_primeiro_audio") is not None
+    ]
+
+    print(f"Turnos lentos (≥ {LIMITE_LENTO:.0f} s até ao primeiro áudio)")
+
+    if not lentos:
+        print("  nenhum")
+    else:
+        print(
+            f"  {len(lentos)} de {len(medidos)} medidos "
+            f"({100 * len(lentos) / len(medidos):.0f}%)"
+        )
+        print()
+        print(
+            f"  {'quando':<22} {'total':>7} {'ferram.':>8} "
+            f"{'modelo':>7}  turno"
+        )
+
+        for t in lentos[:8]:
+            print(
+                f"  {t['ts'][:19]:<22} "
+                f"{formatar(t.get('t_primeiro_audio')):>7} "
+                f"{formatar(t.get('t_ferramentas')):>8} "
+                f"{formatar(t.get('t_modelo')):>7}  "
+                f"t{t.get('turno', '?')}"
+            )
+
+        print()
+        print(
+            "  Se 'modelo' é grande e 'ferram.' é pequeno, a demora foi\n"
+            "  do Gemini ou da ligação a ele. Se for ao contrário, foi a\n"
+            "  API do Spotify."
+        )
+
+    print()
+
+    # -----------------------------------------------------------------
     # TURNOS FANTASMA — a Fase 3.2
     # -----------------------------------------------------------------
     #
@@ -177,15 +243,57 @@ def resumo(turnos):
             f"({100 * len(fantasma) / len(concluidos):.0f}%)"
         )
 
-        for turno in fantasma[-3:]:
-            resposta = (turno.get("dito") or "")[:60]
-            print(f"    {turno['ts']}  jarvis: {resposta}")
-
         if fantasma:
-            print(
-                "  -> O VAD abriu um turno sem ninguém falar. "
-                "É a Fase 3.2."
-            )
+            # Quanto tempo depois do turno anterior é que cada um abriu.
+            #
+            # É este número que distingue as hipóteses, e só aqui faz
+            # sentido: na BOX, a linha "FOLLOW-UP DETETADO" dispara em
+            # TODOS os follow-ups, incluindo os legítimos. Só o servidor
+            # sabe quais é que ninguém iniciou, porque só ele vê a
+            # transcrição.
+            print()
+            print(f"    {'quando':<22} {'após o anterior':>16}")
+
+            for turno in fantasma[-6:]:
+                print(
+                    f"    {turno['ts'][:19]:<22} "
+                    f"{formatar(turno.get('t_desde_anterior')):>16}"
+                )
+
+            atrasos = [
+                t.get("t_desde_anterior")
+                for t in fantasma
+                if t.get("t_desde_anterior") is not None
+            ]
+
+            antigos = len(fantasma) - len(atrasos)
+
+            if antigos:
+                plural = "são anteriores" if antigos > 1 else "é anterior"
+                print()
+                print(
+                    f"    ({antigos} {plural} a esta medição "
+                    "e aparece(m) como —)"
+                )
+
+            if atrasos:
+                m = mediana(atrasos)
+                print()
+                print(
+                    f"    mediana: {formatar(m)}   "
+                    f"(de {len(atrasos)} medido(s))"
+                )
+
+                if m is not None and m < 2.0:
+                    print(
+                        "    -> Logo a seguir à resposta. Compatível com a\n"
+                        "       BOX ouvir-se a si própria (F2, sem AEC)."
+                    )
+                else:
+                    print(
+                        "    -> Vários segundos depois. NÃO é a cauda da\n"
+                        "       própria voz; é som externo (F3)."
+                    )
 
         print()
 
@@ -279,12 +387,23 @@ def listar(turnos):
     for turno in turnos:
         marca = "HTTP" if turno.get("fallback") else "WS"
 
+        detalhe = ""
+
+        # Só decompõe quando há alguma coisa para decompor. Numa linha
+        # de 1,0 s a decomposição é ruído; numa de 17 s é a resposta.
+        if (turno.get("t_ferramentas") or 0) > 0.05:
+            detalhe = (
+                f"  (ferram. {formatar(turno['t_ferramentas'])}"
+                f" + modelo {formatar(turno.get('t_modelo'))})"
+            )
+
         print(
             f"{turno['ts']}  [{marca}] "
             f"{turno.get('conversa', ''):<8} "
             f"t{turno.get('turno', '?')}  "
             f"{turno.get('resultado', '?'):<10} "
             f"1.º áudio {formatar(turno.get('t_primeiro_audio'))}"
+            f"{detalhe}"
         )
 
         if turno.get("ouvido"):
@@ -310,7 +429,29 @@ def main():
     modo_lista = "--lista" in argumentos
     argumentos = [a for a in argumentos if a != "--lista"]
 
+    desde = None
+
+    if "--desde" in argumentos:
+        i = argumentos.index("--desde")
+
+        if i + 1 >= len(argumentos):
+            print("Falta a data. Exemplo: --desde 2026-09-30")
+            return 1
+
+        desde = argumentos[i + 1]
+        del argumentos[i:i + 2]
+
     turnos = ler_turnos()
+
+    if desde:
+        antes = len(turnos)
+        turnos = [t for t in turnos if t.get("ts", "") >= desde]
+
+        print(
+            f"A partir de {desde}: {len(turnos)} turnos "
+            f"({antes - len(turnos)} anteriores ignorados)"
+        )
+        print()
 
     if argumentos:
         try:
