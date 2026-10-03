@@ -1,184 +1,227 @@
-import requests
+"""
+Executa as acções Spotify pedidas pelo Gemini.
+
+Até 2026-10-01 este módulo falava com o Spotify **através do próprio Flask**:
+fazia `requests.post("http://127.0.0.1:8888/api/pause")`, o Flask recebia, e o
+Flask chamava o SpotifyClient. Um salto de rede para dentro do mesmo processo.
+
+Três razões para o tirar:
+
+  - **Acoplamento.** O servidor de voz (porta 8765) ficava dependente de o
+    Flask (8888) estar de pé. É a mesma família do bug B5, em que o Flask
+    sobrevivia à morte do servidor de voz e o sistema parecia vivo sem o ser.
+
+  - **Parâmetros.** As acções novas desta fase (`play_search`, `set_volume`)
+    levam argumentos. Passá-los pelo salto obrigava a inventar endpoints REST
+    internos que só o próprio processo chamaria — trabalho sem retorno.
+
+  - **Latência.** Um pedido HTTP, com ligação, por cada comando de voz.
+
+Agora chama o `SpotifyClient` directamente. A instância é partilhada com o
+Flask através do `spotify_session`, o que importa para a cache funcionar — ver
+o cabeçalho desse módulo.
+"""
+
+from spotify_session import spotify
 
 
-BASE_URL = "http://127.0.0.1:8888"
+# Quanto desactualizado pode estar o estado devolvido a uma pergunta de voz.
+#
+# Esta chamada acontece com o utilizador à espera, e uma ida fresca à API do
+# Spotify custa entre 1 e 5 s. Para dizer que música está a tocar, uma resposta
+# com alguns segundos é indistinguível da actual.
+#
+# 15 s e não 8 porque o polling da BOX fica suspenso durante a voz: quando este
+# pedido chega, o último polling já tem a idade do turno inteiro.
+#
+# Seguro porque o `send_command` invalida a cache — depois de um "passa esta" a
+# resposta seguinte é sempre fresca.
+ESTADO_MAX_IDADE_SEGUNDOS = 15
 
 
-def execute_intent(intent):
-    action = intent.action
-
-    try:
-        # -----------------------------------------
-        # PAUSE
-        # -----------------------------------------
-        if action == "pause":
-            response = requests.post(
-                f"{BASE_URL}/api/pause",
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            return {
-                "ok": True,
-                "action": action,
-                "message": "Reprodução pausada.",
-            }
-
-        # -----------------------------------------
-        # RESUME / PLAY
-        # -----------------------------------------
-        if action == "resume":
-            response = requests.post(
-                f"{BASE_URL}/api/play",
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            return {
-                "ok": True,
-                "action": action,
-                "message": "Reprodução retomada.",
-            }
-
-        # -----------------------------------------
-        # NEXT
-        # -----------------------------------------
-        if action == "next":
-            response = requests.post(
-                f"{BASE_URL}/api/next",
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            return {
-                "ok": True,
-                "action": action,
-                "message": "Passei para a próxima música.",
-            }
-
-        # -----------------------------------------
-        # PREVIOUS
-        # -----------------------------------------
-        if action == "previous":
-            response = requests.post(
-                f"{BASE_URL}/api/previous",
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            return {
-                "ok": True,
-                "action": action,
-                "message": "Voltei à música anterior.",
-            }
-
-        # -----------------------------------------
-        # CURRENT TRACK
-        # -----------------------------------------
-        if action == "current_track":
-            # Esta chamada acontece dentro de um turno de voz, com o
-            # utilizador à espera. Uma ida fresca à API do Spotify custa
-            # entre 1 e 5 s; para dizer que música está a tocar, uma
-            # resposta com alguns segundos é indistinguível da actual.
-            #
-            # 15 s e não 8 porque o polling da BOX fica suspenso durante a
-            # voz: quando este pedido chega, o último polling já tem a
-            # duração do turno. Com 8 s acertávamos em cerca de metade das
-            # vezes; com 15 acertamos quase sempre.
-            #
-            # Seguro porque send_command invalida a cache — depois de um
-            # "passa esta" a resposta seguinte é sempre fresca.
-            response = requests.get(
-                f"{BASE_URL}/api/status",
-                params={"max_age": 15},
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            status = response.json()
-
-            if not status.get("active"):
-                return {
-                    "ok": True,
-                    "action": action,
-                    "message": "Não há nenhuma música a tocar.",
-                }
-
-            track = status.get("track", "")
-            artist = status.get("artist", "")
-
-            return {
-                "ok": True,
-                "action": action,
-                "track": track,
-                "artist": artist,
-                "message": f"Está a tocar {track}, de {artist}.",
-            }
-
-        # -----------------------------------------
-        # AINDA NÃO IMPLEMENTADOS
-        # -----------------------------------------
-        if action == "play_search":
-            return {
-                "ok": False,
-                "action": action,
-                "message": (
-                    "Pesquisa e reprodução ainda não implementadas."
-                ),
-            }
-
-        if action == "set_volume":
-            return {
-                "ok": False,
-                "action": action,
-                "message": (
-                    "Controlo de volume ainda não implementado."
-                ),
-            }
-
-        return {
-            "ok": False,
-            "action": action,
-            "message": "Comando não reconhecido.",
-        }
-
-    except requests.RequestException as exc:
-        return {
-            "ok": False,
-            "action": action,
-            "message": f"Erro ao executar comando Spotify: {exc}",
-        }
-
-class _SpotifyIntent:
-    def __init__(self, action):
-        self.action = action
+# Cada acção simples é (método HTTP, endpoint da API, o que dizer se correr bem).
+#
+# Esta tabela é agora a única lista de acções de transporte do projecto. As
+# outras três — intent_service, local_intent_service e o ramo de texto do
+# /api/voice — foram apagadas em 2026-09-30 por serem inalcançáveis.
+COMANDOS_SIMPLES = {
+    "pause": ("PUT", "/me/player/pause", "Reprodução pausada."),
+    "resume": ("PUT", "/me/player/play", "Reprodução retomada."),
+    "next": ("POST", "/me/player/next", "Passei para a próxima música."),
+    "previous": ("POST", "/me/player/previous", "Voltei à música anterior."),
+}
 
 
-def execute_spotify_action(action):
-    """
-    Adaptador simples para permitir ao Gemini Live
-    executar as ações Spotify já existentes.
-    """
-    allowed_actions = {
-        "pause",
-        "resume",
-        "next",
-        "previous",
-        "current_track",
+def _erro(accao, mensagem):
+    return {
+        "ok": False,
+        "action": accao,
+        "message": mensagem,
     }
 
-    if action not in allowed_actions:
+
+def _executar_comando_simples(accao):
+    metodo, endpoint, mensagem_ok = COMANDOS_SIMPLES[accao]
+
+    resposta, estado = spotify.send_command(metodo, endpoint)
+
+    if resposta.get("success"):
         return {
-            "ok": False,
-            "action": action,
-            "message": "Ação Spotify não permitida.",
+            "ok": True,
+            "action": accao,
+            "message": mensagem_ok,
         }
 
-    return execute_intent(
-        _SpotifyIntent(action)
+    # O Spotify recusou. Os casos que acontecem na prática merecem uma
+    # resposta que o Jarvis possa dizer em voz alta; o resto fica genérico
+    # mas com o código, para o registo de turnos servir de alguma coisa.
+    #
+    # O 404 é o mais provável: é o que o Spotify devolve quando não há
+    # nenhum dispositivo activo. Decisão D7 — dizer e parar, sem tentar
+    # adivinhar um dispositivo e pôr música a tocar noutro sítio da casa.
+    if estado == 404:
+        return _erro(
+            accao,
+            "Não há nenhum dispositivo Spotify activo. "
+            "Abre o Spotify no telemóvel.",
+        )
+
+    if estado == 403:
+        return _erro(
+            accao,
+            "O Spotify recusou esse comando neste dispositivo.",
+        )
+
+    if estado == 401:
+        return _erro(
+            accao,
+            "A sessão Spotify expirou e não foi possível renová-la.",
+        )
+
+    return _erro(
+        accao,
+        f"O Spotify respondeu com erro {estado}.",
     )
+
+
+def _definir_volume(accao, volume):
+    """
+    PUT /me/player/volume?volume_percent=N
+
+    O Spotify aceita 0–100. Limitamos antes de enviar em vez de deixar a API
+    recusar: o modelo pode dizer 150 se o utilizador disser "põe no máximo",
+    e 100 é o que ele quer dizer.
+    """
+    try:
+        pedido = int(volume)
+
+    except (TypeError, ValueError):
+        return _erro(
+            accao,
+            "Não percebi para que valor queres o volume.",
+        )
+
+    valor = max(0, min(100, pedido))
+
+    resposta, estado = spotify.send_command(
+        "PUT",
+        "/me/player/volume",
+        params={"volume_percent": valor},
+    )
+
+    if resposta.get("success"):
+        if pedido > 100:
+            mensagem = "Volume no máximo."
+
+        elif pedido < 0:
+            mensagem = "Volume no mínimo."
+
+        else:
+            mensagem = f"Volume a {valor}."
+
+        return {
+            "ok": True,
+            "action": accao,
+            "volume": valor,
+            "message": mensagem,
+        }
+
+    if estado == 404:
+        return _erro(
+            accao,
+            "Não há nenhum dispositivo Spotify activo. "
+            "Abre o Spotify no telemóvel.",
+        )
+
+    # Nem todos os dispositivos Spotify Connect aceitam controlo de volume
+    # — vários altifalantes e televisões recusam com 403. Vale a pena dizer
+    # porquê, senão parece que o comando não foi percebido.
+    if estado == 403:
+        return _erro(
+            accao,
+            "Este dispositivo não deixa mudar o volume daqui. "
+            "Tens de o mudar no próprio aparelho.",
+        )
+
+    return _erro(
+        accao,
+        f"Não consegui mudar o volume: erro {estado}.",
+    )
+
+
+def _estado_actual(accao):
+    estado, codigo = spotify.get_status(
+        max_age_seconds=ESTADO_MAX_IDADE_SEGUNDOS
+    )
+
+    if codigo != 200:
+        return _erro(
+            accao,
+            "Não consegui saber o que está a tocar.",
+        )
+
+    if not estado.get("active"):
+        return {
+            "ok": True,
+            "action": accao,
+            "message": "Não há nenhuma música a tocar.",
+        }
+
+    faixa = estado.get("track", "")
+    artista = estado.get("artist", "")
+
+    return {
+        "ok": True,
+        "action": accao,
+        "track": faixa,
+        "artist": artista,
+        "message": f"Está a tocar {faixa}, de {artista}.",
+    }
+
+
+def execute_spotify_action(action, volume=None):
+    """
+    Ponto de entrada único, chamado pela ferramenta `spotify_control`.
+
+    Nunca levanta excepção: uma falha aqui derrubava a conversa inteira, e o
+    Gemini sabe explicar ao utilizador um resultado com ok=False.
+    """
+    try:
+        if action in COMANDOS_SIMPLES:
+            return _executar_comando_simples(action)
+
+        if action == "current_track":
+            return _estado_actual(action)
+
+        if action == "set_volume":
+            return _definir_volume(action, volume)
+
+        return _erro(action, "Comando não reconhecido.")
+
+    except Exception as erro:
+        print(f"[ACCAO] Falha inesperada em {action}: {erro}")
+
+        return _erro(
+            action,
+            "Não consegui falar com o Spotify.",
+        )

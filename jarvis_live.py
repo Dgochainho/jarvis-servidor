@@ -90,6 +90,7 @@ SPOTIFY_ACTIONS = [
     "next",
     "previous",
     "current_track",
+    "set_volume",
 ]
 
 
@@ -99,8 +100,8 @@ SPOTIFY_CONTROL_DECLARATION = {
     "description": (
         "Controla a reprodução Spotify do utilizador. "
         "Usa esta função para pausar, retomar, avançar para a próxima "
-        "música, voltar à música anterior, ou consultar a música que "
-        "está a tocar."
+        "música, voltar à música anterior, consultar a música que está a "
+        "tocar, ou mudar o volume."
     ),
 
     "parameters": {
@@ -110,7 +111,16 @@ SPOTIFY_CONTROL_DECLARATION = {
                 "type": "string",
                 "enum": SPOTIFY_ACTIONS,
                 "description": "A ação Spotify a executar.",
-            }
+            },
+            "volume": {
+                "type": "integer",
+                "description": (
+                    "Volume de 0 a 100. Obrigatório quando "
+                    "action=set_volume, ignorado nas outras. "
+                    "Se o utilizador pedir o máximo usa 100, "
+                    "se pedir o mínimo ou silêncio usa 0."
+                ),
+            },
         },
         "required": ["action"],
     },
@@ -250,10 +260,13 @@ async def dispatch_tool_calls(tool_call, log_prefix):
             action = args.get("action")
 
             # action_service usa requests síncrono. Corre fora do event
-            # loop para não bloquear a ligação Gemini Live.
+            # loop para não bloquear a ligação Gemini Live — e desde
+            # 2026-09-30 sabemos o que acontece quando o loop bloqueia:
+            # a BOX deixa de conseguir enviar áudio.
             result = await asyncio.to_thread(
                 execute_spotify_action,
                 action,
+                args.get("volume"),
             )
 
             print(f"{log_prefix} Spotify: {action} -> {result}")

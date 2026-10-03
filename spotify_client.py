@@ -365,8 +365,22 @@ class SpotifyClient:
         self,
         method,
         endpoint,
+        params=None,
+        json_body=None,
     ):
+        """
+        Um pedido à API do Spotify, com renovação de token se for preciso.
 
+        `params` vai na query string (ex.: volume_percent, q, type) e
+        `json_body` no corpo (ex.: context_uri, uris). Até 2026-10-03 não
+        existiam: o send_command só sabia fazer pedidos sem argumentos, e era
+        esse o bloqueio real por trás do "ainda não implementado" do
+        play_search e do set_volume.
+
+        Os dois argumentos são repetidos na repetição pós-401. Esquecê-los aí
+        daria um bug que só aparece quando o token expira a meio — raro, e
+        por isso difícil de apanhar em testes.
+        """
         token = (
             self.get_valid_access_token()
         )
@@ -394,6 +408,8 @@ class SpotifyClient:
                 method,
                 url,
                 headers=headers,
+                params=params,
+                json=json_body,
                 timeout=10,
             )
 
@@ -427,6 +443,8 @@ class SpotifyClient:
                     method,
                     url,
                     headers=headers,
+                    params=params,
+                    json=json_body,
                     timeout=10,
                 )
 
@@ -649,11 +667,15 @@ class SpotifyClient:
         self,
         method,
         endpoint,
+        params=None,
+        json_body=None,
     ):
 
         response, error = self._request(
             method,
             endpoint,
+            params=params,
+            json_body=json_body,
         )
 
         # Qualquer comando altera o estado da reprodução, por isso o que

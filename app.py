@@ -4,7 +4,6 @@ import wave
 import time
 import math
 import struct
-from pathlib import Path
 
 from flask import (
     Flask,
@@ -16,7 +15,9 @@ from flask import (
     stream_with_context,
 )
 
-from spotify_client import SpotifyClient
+# A instância vive no spotify_session para poder ser partilhada com o
+# action_service sem import circular. Ver o cabeçalho desse módulo.
+from spotify_session import spotify, SCOPES
 from cover_service import CoverService
 from mdns_service import MdnsService
 from gemini_live_service import stream_gemini_live_reply
@@ -47,47 +48,14 @@ REDIRECT_URI = os.getenv(
 )
 
 
-BASE_DIR = (
-    Path(__file__)
-    .resolve()
-    .parent
-)
-
-
-TOKEN_FILE = (
-    BASE_DIR
-    / ".spotify_token.json"
-)
-
-
-SCOPES = [
-
-    "user-read-currently-playing",
-
-    "user-read-playback-state",
-
-    "user-modify-playback-state",
-]
+# BASE_DIR, TOKEN_FILE e SCOPES mudaram-se para o spotify_session.py,
+# que é quem constrói o cliente.
 
 
 app = Flask(__name__)
 
-# (Havia aqui uma segunda definição de BASE_DIR, que só existia para
-# construir o caminho do command.wav. O WAV desapareceu com o ramo de
-# transcrição; o BASE_DIR verdadeiro está mais acima, junto ao
-# TOKEN_FILE.)
 
 
-spotify = SpotifyClient(
-
-    client_id=CLIENT_ID,
-
-    client_secret=CLIENT_SECRET,
-
-    redirect_uri=REDIRECT_URI,
-
-    token_file=TOKEN_FILE,
-)
 
 cover_service = CoverService()
 
