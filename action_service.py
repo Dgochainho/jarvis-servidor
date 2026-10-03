@@ -169,6 +169,124 @@ def _definir_volume(accao, volume):
     )
 
 
+def _artistas(item):
+    """Nomes dos artistas de uma faixa ou álbum, juntos por vírgula."""
+    nomes = [
+        a.get("name", "")
+        for a in (item.get("artists") or [])
+        if a and a.get("name")
+    ]
+
+    return ", ".join(nomes)
+
+
+def _descrever(item, tipo):
+    """O que o Jarvis diz depois de pôr alguma coisa a tocar."""
+    nome = item.get("name", "")
+
+    if tipo == "track":
+        artista = _artistas(item)
+        return f"A tocar {nome}, de {artista}." if artista else f"A tocar {nome}."
+
+    if tipo == "artist":
+        return f"A tocar {nome}."
+
+    if tipo == "album":
+        artista = _artistas(item)
+        return (
+            f"A tocar o álbum {nome}, de {artista}."
+            if artista
+            else f"A tocar o álbum {nome}."
+        )
+
+    return f"A tocar a playlist {nome}."
+
+
+def _tocar_pesquisa(accao, query, tipo):
+    """
+    Pesquisa e põe a tocar. É o `"põe Arctic Monkeys"`.
+
+    O `tipo` vem do Gemini (decisão D3). Ele sabe que "Tame Impala" é um
+    artista e que "Do I Wanna Know" é uma faixa; uma regra fixa deste lado
+    errava sempre num dos dois casos.
+
+    Faixas tocam-se por `uris`; artistas, álbuns e playlists por
+    `context_uri` — que é a única via desde que o `top-tracks` foi removido
+    em Fevereiro de 2026.
+    """
+    if not query:
+        return _erro(accao, "Não percebi o que queres ouvir.")
+
+    if tipo not in ("track", "artist", "album", "playlist"):
+        # O modelo não preencheu ou inventou. A faixa é o palpite menos mau.
+        tipo = "track"
+
+    itens, erro = spotify.search(query, kind=tipo)
+
+    if erro:
+        print(f"[ACCAO] Pesquisa falhou ({query!r}, {tipo}): {erro}")
+
+        return _erro(
+            accao,
+            "Não consegui pesquisar no Spotify agora.",
+        )
+
+    if not itens:
+        return {
+            "ok": True,
+            "action": accao,
+            "query": query,
+            "message": f"Não encontrei nada com o nome {query}.",
+        }
+
+    escolhido = itens[0]
+    uri = escolhido.get("uri")
+
+    if not uri:
+        return _erro(accao, f"Não consegui pôr {query} a tocar.")
+
+    corpo = (
+        {"uris": [uri]}
+        if tipo == "track"
+        else {"context_uri": uri}
+    )
+
+    resposta, estado = spotify.send_command(
+        "PUT",
+        "/me/player/play",
+        json_body=corpo,
+    )
+
+    if resposta.get("success"):
+        return {
+            "ok": True,
+            "action": accao,
+            "query": query,
+            "tipo": tipo,
+            "uri": uri,
+            "message": _descrever(escolhido, tipo),
+        }
+
+    if estado == 404:
+        return _erro(
+            accao,
+            "Não há nenhum dispositivo Spotify activo. "
+            "Abre o Spotify no telemóvel.",
+        )
+
+    if estado == 403:
+        return _erro(
+            accao,
+            "O Spotify não deixou começar a reprodução. "
+            "Confirma que tens Premium e um dispositivo disponível.",
+        )
+
+    return _erro(
+        accao,
+        f"Não consegui pôr {query} a tocar: erro {estado}.",
+    )
+
+
 def _estado_actual(accao):
     estado, codigo = spotify.get_status(
         max_age_seconds=ESTADO_MAX_IDADE_SEGUNDOS
@@ -199,7 +317,7 @@ def _estado_actual(accao):
     }
 
 
-def execute_spotify_action(action, volume=None):
+def execute_spotify_action(action, volume=None, query=None, tipo=None):
     """
     Ponto de entrada único, chamado pela ferramenta `spotify_control`.
 
@@ -215,6 +333,9 @@ def execute_spotify_action(action, volume=None):
 
         if action == "set_volume":
             return _definir_volume(action, volume)
+
+        if action == "play_search":
+            return _tocar_pesquisa(action, query, tipo)
 
         return _erro(action, "Comando não reconhecido.")
 

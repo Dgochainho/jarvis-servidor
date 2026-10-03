@@ -457,6 +457,80 @@ class SpotifyClient:
 
 
     # -----------------------------------------------------
+    # PESQUISA
+    # -----------------------------------------------------
+
+    # O JSON da pesquisa vem agrupado por tipo, no plural.
+    CHAVES_PESQUISA = {
+        "track": "tracks",
+        "artist": "artists",
+        "album": "albums",
+        "playlist": "playlists",
+    }
+
+
+    def search(self, query, kind="track", limit=5):
+        """
+        Pesquisa no catálogo. Devolve `(itens, erro)`.
+
+        Duas notas sobre as alterações de Fevereiro de 2026:
+
+        1. O `limit` passou a ter um **máximo de 10** (era 50) e a omissão
+           passou a 5 (era 20). Cinco chega de sobra para "põe X": só
+           usamos o primeiro.
+
+        2. O `GET /artists/{id}/top-tracks` foi **removido**. Era a maneira
+           óbvia de tocar um artista. A alternativa é pesquisar o artista e
+           entregar o URI dele como `context_uri` ao player — a documentação
+           confirma que artistas são contextos válidos.
+
+        `market=from_token` existe para os resultados serem reprodutíveis no
+        país do utilizador. Sem isso, a pesquisa devolve conteúdo de todos os
+        mercados e "põe X" pode escolher uma faixa que não toca aqui.
+        """
+        if not query:
+            return [], "pesquisa_vazia"
+
+        if kind not in self.CHAVES_PESQUISA:
+            return [], f"tipo_desconhecido:{kind}"
+
+        response, error = self._request(
+            "GET",
+            "/search",
+            params={
+                "q": query,
+                "type": kind,
+                "limit": max(1, min(10, limit)),
+                "market": "from_token",
+            },
+        )
+
+        if response is None:
+            return [], error
+
+        if response.status_code != 200:
+            return [], f"spotify_{response.status_code}"
+
+        try:
+            dados = response.json()
+
+        except ValueError:
+            return [], "resposta_ilegivel"
+
+        bloco = dados.get(self.CHAVES_PESQUISA[kind]) or {}
+
+        # O Spotify devolve entradas a null na pesquisa de playlists.
+        # Filtrar aqui evita um AttributeError lá à frente.
+        itens = [
+            item
+            for item in (bloco.get("items") or [])
+            if item
+        ]
+
+        return itens, None
+
+
+    # -----------------------------------------------------
     # ESTADO ATUAL
     # -----------------------------------------------------
 

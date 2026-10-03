@@ -91,6 +91,7 @@ SPOTIFY_ACTIONS = [
     "previous",
     "current_track",
     "set_volume",
+    "play_search",
 ]
 
 
@@ -101,7 +102,7 @@ SPOTIFY_CONTROL_DECLARATION = {
         "Controla a reprodução Spotify do utilizador. "
         "Usa esta função para pausar, retomar, avançar para a próxima "
         "música, voltar à música anterior, consultar a música que está a "
-        "tocar, ou mudar o volume."
+        "tocar, mudar o volume, ou pôr a tocar alguma coisa específica."
     ),
 
     "parameters": {
@@ -119,6 +120,31 @@ SPOTIFY_CONTROL_DECLARATION = {
                     "action=set_volume, ignorado nas outras. "
                     "Se o utilizador pedir o máximo usa 100, "
                     "se pedir o mínimo ou silêncio usa 0."
+                ),
+            },
+
+            "query": {
+                "type": "string",
+                "description": (
+                    "O que procurar. Obrigatório quando "
+                    "action=play_search. Só o nome, sem verbos: "
+                    "de \"põe os Arctic Monkeys\" tira "
+                    "\"Arctic Monkeys\"."
+                ),
+            },
+
+            "tipo": {
+                "type": "string",
+                "enum": ["track", "artist", "album", "playlist"],
+                "description": (
+                    "O que é que a query é. Obrigatório quando "
+                    "action=play_search. "
+                    "\"Tame Impala\" é artist. "
+                    "\"Do I Wanna Know\" é track. "
+                    "\"o álbum Currents\" é album. "
+                    "\"a minha playlist de treino\" é playlist. "
+                    "Na dúvida entre faixa e artista, decide pelo que o "
+                    "nome é de facto, não pela forma como foi pedido."
                 ),
             },
         },
@@ -168,6 +194,10 @@ SYSTEM_INSTRUCTION = (
 
     "Quando o utilizador pedir uma ação sobre o Spotify, usa "
     "obrigatoriamente a ferramenta spotify_control. "
+
+    "Para pôr música a tocar, preenche sempre query e tipo. "
+    "Nunca digas que não consegues tocar uma música específica: "
+    "consegues, com action=play_search. "
 
     "Usa-a também quando o utilizador perguntar que música está "
     "atualmente a tocar. "
@@ -267,6 +297,8 @@ async def dispatch_tool_calls(tool_call, log_prefix):
                 execute_spotify_action,
                 action,
                 args.get("volume"),
+                args.get("query"),
+                args.get("tipo"),
             )
 
             print(f"{log_prefix} Spotify: {action} -> {result}")
