@@ -469,6 +469,26 @@ class SpotifyClient:
     }
 
 
+    # Mercado usado na pesquisa, para os resultados serem reprodutíveis cá.
+    #
+    # Está escrito à mão em vez de `from_token`, e a razão foi medida a
+    # 2026-10-05: com `market=from_token`, o `GET /search` responde
+    #
+    #     403 {"error": {"status": 403, "message": "Insufficient client scope"}}
+    #
+    # e com `market=PT`, ou sem market nenhum, responde 200. O `from_token`
+    # manda o Spotify ir ver o país do utilizador, e isso exige o scope
+    # `user-read-private`, que não pedimos. A prova está no mesmo
+    # diagnóstico: o `GET /me` devolve 200 mas com `country` e `product` a
+    # None — os campos que esse scope desbloqueia.
+    #
+    # Havia duas saídas: pedir o scope, o que obriga a reautenticar, ou
+    # dizer o país. Enquanto a BOX viver nesta sala, dizer o país é mais
+    # barato e não mexe em tokens. Se um dia o serviço sair de Portugal,
+    # o caminho certo é o scope e ler o país do `/me`.
+    MERCADO = "PT"
+
+
     def search(self, query, kind="track", limit=5):
         """
         Pesquisa no catálogo. Devolve `(itens, erro)`.
@@ -484,9 +504,10 @@ class SpotifyClient:
            entregar o URI dele como `context_uri` ao player — a documentação
            confirma que artistas são contextos válidos.
 
-        `market=from_token` existe para os resultados serem reprodutíveis no
-        país do utilizador. Sem isso, a pesquisa devolve conteúdo de todos os
-        mercados e "põe X" pode escolher uma faixa que não toca aqui.
+        O `market` existe para os resultados serem reprodutíveis cá. Sem ele,
+        a pesquisa devolve conteúdo de todos os mercados e "põe X" pode
+        escolher uma faixa que não toca em Portugal. Ver a nota em `MERCADO`
+        para saber porque é "PT" à mão e não `from_token`.
         """
         if not query:
             return [], "pesquisa_vazia"
@@ -501,7 +522,7 @@ class SpotifyClient:
                 "q": query,
                 "type": kind,
                 "limit": max(1, min(10, limit)),
-                "market": "from_token",
+                "market": self.MERCADO,
             },
         )
 
@@ -509,7 +530,19 @@ class SpotifyClient:
             return [], error
 
         if response.status_code != 200:
-            return [], f"spotify_{response.status_code}"
+            # O corpo vai junto desde 2026-10-05.
+            #
+            # Até esse dia isto devolvia só `spotify_403`, e o log do
+            # servidor dizia "Pesquisa falhou: spotify_403" — verdade, e
+            # inútil. Foi preciso um script à parte para descobrir que o
+            # corpo dizia "Insufficient client scope", que é a resposta
+            # inteira.
+            #
+            # É a terceira vez nesta fase que um instrumento guarda o
+            # código e deita fora a explicação. Aqui não volta a acontecer.
+            corpo = (response.text or "").strip().replace("\n", " ")
+
+            return [], f"spotify_{response.status_code}: {corpo[:200]}"
 
         try:
             dados = response.json()
@@ -771,11 +804,30 @@ class SpotifyClient:
             }, 401
 
 
-        if response.status_code == 204:
+        # Qualquer 2xx é sucesso.
+        #
+        # Até 2026-10-05 só o 204 contava, e isso produziu a frase mais
+        # absurda que este projecto já disse em voz alta:
+        #
+        #     tu:     Muda de música, não gosto desta.
+        #     tool:   spotify_control({'action': 'next'}) -> FALHOU
+        #             O Spotify respondeu com erro 200.
+        #
+        # O 204 é o que a documentação promete nos endpoints do player, e
+        # durante meses foi o que veio. Nesse dia veio 200, e o código
+        # tratou a resposta de sucesso mais vulgar que existe como uma
+        # falha — o Jarvis pediu desculpa por uma coisa que tinha feito.
+        #
+        # Isto explica também os `next -> FALHOU` de 10-03 e o
+        # `pause -> FALHOU` de 09-30, que ficaram sem causa conhecida.
+        #
+        # Não vale a pena adivinhar quando é 200 e quando é 204: a regra
+        # de HTTP é 2xx, e é essa que fica.
+        if 200 <= response.status_code < 300:
 
             return {
                 "success": True
-            }, 200
+            }, response.status_code
 
 
         return {

@@ -35,14 +35,35 @@ exactamente este defeito, porque o `Tee-Object` também escreve na consola.
 Para acompanhar o servidor enquanto corre, noutro separador:
 
 ```powershell
-Get-Content log-servidor.txt -Wait -Tail 20
+Get-Content log-servidor.txt -Wait -Tail 20 -Encoding UTF8
 ```
 
-**BOX** (PowerShell, na pasta do firmware):
+Numa janela **nova**. Uma que já estivesse aberta antes continua a descodificar
+o ficheiro anterior e mostra lixo.
+
+**BOX** (PowerShell, numa janela à parte). O `idf.py` não existe até se carregar
+o ambiente, e isso perde-se quando se fecha a janela — por isso são sempre estas
+quatro linhas, por esta ordem:
 
 ```powershell
+cd "C:\Users\dgoch\Desktop\ProjetoAss Istant\projetos\hello_world"
+$env:IDF_TOOLS_PATH = "C:\Espressif"
+. C:\esp\v6.0.2\esp-idf\export.ps1
 idf.py -p COM9 monitor
 ```
+
+O **ponto solitário** na terceira linha é obrigatório: sem ele o script corre num
+escopo próprio, define as variáveis lá dentro e deita-as fora ao acabar.
+
+O `IDF_TOOLS_PATH` é preciso porque as ferramentas estão em `C:\Espressif` e o
+`export.ps1` procura-as, por omissão, em `%USERPROFILE%\.espressif`. Para deixar
+de repetir essa linha, uma vez só:
+
+```powershell
+[Environment]::SetEnvironmentVariable("IDF_TOOLS_PATH", "C:\Espressif", "User")
+```
+
+Sair do monitor: **Ctrl+]** (o Ctrl+C reinicia a BOX).
 
 Ter o Spotify a tocar num dispositivo antes de começar. Ficar a ~1 m da BOX,
 com a sala em silêncio, salvo indicação em contrário.
@@ -244,6 +265,115 @@ comportamento até 2026-09-27: a conversa acabava pelo caminho do erro em vez do
 caminho do fecho. Funcionava por acidente, porque a BOX também rearma com
 `ERROR`.
 
+### T22 · Pôr a tocar por nome
+
+Com o Spotify a tocar noutra coisa, dizer:
+**"Jarvis, põe Let It Happen dos Tame Impala"**.
+
+**Esperado:** a faixa certa começa a tocar e o Jarvis diz
+*"A tocar Let It Happen, de Tame Impala."* No registo:
+
+```
+tool: spotify_control({'action': 'play_search', 'query': '...', 'tipo': 'track'}) -> ok
+```
+
+**Falha se:**
+
+- a acção for `next` em vez de `play_search` — o modelo não percebeu que havia
+  um nome. Foi o que aconteceu a 10-03, e a correcção foi pôr uma descrição com
+  exemplos no parâmetro `action`; o `enum` sozinho não chega.
+- o Jarvis disser que não consegue tocar músicas específicas. Até 2026-09-28
+  dizia-o, e tinha razão.
+- aparecer `Não consegui pesquisar no Spotify agora.` — ver T28.
+
+### T23 · Tipo correcto ⏳
+
+Três pedidos seguidos: **"põe Tame Impala"** (artista), **"põe Do I Wanna
+Know"** (faixa), **"põe o álbum Currents"** (álbum).
+
+**Esperado:** no registo de turnos, o `tipo` enviado é `artist`, `track` e
+`album`, pela ordem certa, e os três tocam.
+**Falha se:** o `tipo` não bater certo. Quem o decide é o Gemini (decisão D3),
+porque "Tame Impala" é um artista e "Do I Wanna Know" é uma faixa, e nenhuma
+regra fixa deste lado acerta nos dois.
+
+Importa porque faixas tocam por `uris` e o resto por `context_uri` — são ramos
+diferentes do código. **Por correr:** até 2026-10-06 só o `track` foi exercitado
+em campo.
+
+### T24 · Sem dispositivo activo ⏳
+
+Fechar o Spotify em **todos** os dispositivos. Dizer **"Jarvis, põe Tame
+Impala"**.
+
+**Esperado:** resposta falada a dizer que não há nenhum dispositivo activo e que
+é preciso abrir o Spotify. Decisão D7 — dizer e parar, sem adivinhar um
+dispositivo e pôr música a tocar noutro sítio da casa.
+**Falha se:** excepção no log, silêncio, ou o turno abortar.
+
+**Por correr.**
+
+### T25 · Pesquisa sem resultados ⏳
+
+Dizer **"Jarvis, põe zxqwverty"**.
+
+**Esperado:** resposta falada a dizer que não encontrou nada com esse nome, e
+`ok: True` — não encontrar não é uma falha do sistema.
+**Falha se:** excepção, ou começar a tocar outra coisa qualquer.
+
+**Por correr.**
+
+### T26 · Volume por voz
+
+Dizer **"mete o volume a 40%"**, depois **"põe no máximo"**.
+
+**Esperado:** `set_volume` com `volume: 40` e depois `volume: 100`, ambos `ok`,
+e o volume muda mesmo no dispositivo.
+**Falha se:** `403` — vários altifalantes e televisões Spotify Connect não
+aceitam controlo de volume de fora. Nesse caso não é bug nosso, mas a mensagem
+tem de o dizer.
+
+### T27 · Comando de transporte devolve 2xx ⚠️
+
+Dizer **"muda de música"** e confirmar que a faixa muda **e** que o registo diz
+`-> ok`.
+
+**Esperado:** `spotify_control({'action': 'next'}) -> ok`.
+**Falha se:** `FALHOU` com a faixa a mudar à mesma. Esse é o sintoma exacto do
+bug encontrado a 2026-10-05:
+
+```
+tu:     Muda de música, não gosto desta.
+tool:   spotify_control({'action': 'next'}) -> FALHOU
+        O Spotify respondeu com erro 200.
+```
+
+O `send_command` só aceitava **204** como sucesso, que é o que a documentação
+promete nos endpoints do player. Quando veio 200, o código tratou a resposta de
+sucesso mais comum que existe como recusa, e o Jarvis pediu desculpa por uma
+coisa que tinha feito. A regra agora é 2xx.
+
+Este teste é o mais fácil de dar por passado sem o ser: **ouvir a música mudar
+não chega**, porque ela muda nos dois casos. Tem de se olhar para o registo.
+
+### T28 · Pesquisa Spotify (diagnóstico)
+
+Sem a BOX, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe diagnostico_pesquisa.py
+```
+
+**Esperado:** `Sessao Spotify restaurada`, e as quatro variantes a **200**.
+**Falha se:** alguma der 403. O script imprime o corpo da resposta, que é onde
+o Spotify diz o que recusou.
+
+Existe por causa de 2026-10-04, em que o `GET /search` devolvia
+`403 Insufficient client scope`. A causa era o `market=from_token`, que manda o
+Spotify ir ver o país da conta e por isso exige o scope `user-read-private`, que
+não pedimos. Está agora escrito à mão (`MERCADO = "PT"`). Se um dia alguém puser
+`from_token` outra vez, este teste apanha-o antes de a BOX apanhar.
+
 ---
 
 ## Registo
@@ -364,3 +494,57 @@ fonte acústica repetida — provavelmente a cauda da própria voz da BOX, que s
 AEC não há nada a filtrar.
 
 Isto passa a ser o critério de aceitação da Fase 3.2: **19%, medido.**
+
+---
+
+## Baseline 3 — 2026-10-06 · fecho da Fase 2
+
+Servidor: `spotify_client.MERCADO`, `send_command` 2xx, `action_service` sem
+salto HTTP · Firmware: `VOICE_SPEAKER_VOLUME`
+
+Uma única sessão de voz, seis turnos:
+
+```
+17:27:26  Mudar de música.                              next        -> ok
+17:27:53  Agora eu preciso que me metas o Let It
+          Happen do Tame Impala.                        play_search -> ok
+17:28:05  Agora mete o volume a 60%.                    set_volume  -> ok
+17:28:40  (pergunta normal, sem ferramenta)                         -> ok
+17:28:48  Nada, podes retirar.                          end_conv.   -> ok
+```
+
+### Resultados
+
+| Teste | Estado | Nota |
+|---|---|---|
+| T22 Pôr a tocar por nome | **OK** | `play_search`, `tipo: track`, faixa certa |
+| T23 Tipo correcto | — | só `track` exercitado |
+| T24 Sem dispositivo activo | — | por correr |
+| T25 Pesquisa sem resultados | — | por correr |
+| T26 Volume por voz | **OK** | 60% |
+| T27 Transporte devolve 2xx | **OK** | `next -> ok`; era `FALHOU / erro 200` |
+| T28 Pesquisa (diagnóstico) | **OK** | quatro variantes a 200 |
+| T14, T15 | **substituídos** | eram "não implementado"; passam a T22 e T26 |
+
+### O que este baseline não prova
+
+- **T22 só foi exercitado com `tipo: track`.** Artista e álbum usam
+  `context_uri` e não `uris` — é outro ramo do código, e continua por testar em
+  campo.
+- **O `PYTHONIOENCODING=utf-8`** foi posto para o `UnicodeEncodeError` que matou
+  um turno a 10-03 (transcrição em devanágari). Não voltou a aparecer, mas
+  também não voltou a aparecer devanágari: está corrigido por construção, não
+  por observação.
+- **Turnos sem fala reconhecida** (F3) não foram medidos nesta sessão — seis
+  turnos não dão número nenhum.
+
+### Latência
+
+Sem medição nova com `n` suficiente. Os valores desta sessão
+(`1.º áudio` entre 3,3 e 9,4 s nos turnos com ferramenta) estão dentro do
+esperado, mas seis turnos não substituem a Baseline 2.
+
+Nota sobre o turno das 17:27:53: 9,37 s, dos quais 3,28 s em ferramenta. É o
+turno mais lento dos seis, e é o `play_search` — duas chamadas à API do Spotify
+(pesquisa + reprodução) em vez de uma. Vale a pena voltar a medir com mais
+amostras antes de decidir se é para optimizar.

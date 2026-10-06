@@ -60,6 +60,30 @@ def _erro(accao, mensagem):
     }
 
 
+def _registar_recusa(accao, resposta, estado):
+    """
+    Escreve no log o que o Spotify respondeu de facto.
+
+    A `message` de um `_erro` vai para o Gemini e acaba dita em voz alta, por
+    isso tem de ser uma frase; o corpo da resposta não cabe lá. Mas é o corpo
+    que explica a recusa, e sem ele ficam no registo linhas como
+    `next -> FALHOU` que não se conseguem investigar dias depois — foi o que
+    aconteceu a 09-30 e a 10-03.
+
+    Frase para o utilizador, corpo para o log. Os dois.
+    """
+    detalhe = (
+        resposta.get("details")
+        or resposta.get("error")
+        or ""
+    )
+
+    print(
+        f"[ACCAO] {accao} recusado com {estado}: "
+        f"{str(detalhe).strip()[:300]}"
+    )
+
+
 def _executar_comando_simples(accao):
     metodo, endpoint, mensagem_ok = COMANDOS_SIMPLES[accao]
 
@@ -71,6 +95,8 @@ def _executar_comando_simples(accao):
             "action": accao,
             "message": mensagem_ok,
         }
+
+    _registar_recusa(accao, resposta, estado)
 
     # O Spotify recusou. Os casos que acontecem na prática merecem uma
     # resposta que o Jarvis possa dizer em voz alta; o resto fica genérico
@@ -145,6 +171,8 @@ def _definir_volume(accao, volume):
             "volume": valor,
             "message": mensagem,
         }
+
+    _registar_recusa(accao, resposta, estado)
 
     if estado == 404:
         return _erro(
@@ -266,6 +294,8 @@ def _tocar_pesquisa(accao, query, tipo):
             "uri": uri,
             "message": _descrever(escolhido, tipo),
         }
+
+    _registar_recusa(accao, resposta, estado)
 
     if estado == 404:
         return _erro(
