@@ -370,6 +370,59 @@ def resumo(turnos):
         print()
 
     # -----------------------------------------------------------------
+    # PESQUISAS — o triângulo do F4
+    # -----------------------------------------------------------------
+    #
+    # Três linhas por pesquisa, e é tudo. Secção acrescentada a 2026-10-14
+    # para a Fase 4.a.
+    #
+    # Não calcula distâncias nem marca nada como suspeito, de propósito. A
+    # 14-10 testaram-se três métricas contra os 14 casos que havia, e
+    # nenhuma separava as falhas verdadeiras dos falsos positivos — por
+    # janela, as falhas pontuavam até **mais alto** que os pedidos
+    # legítimos. Pôr aqui um número ou um aviso seria dar ares de medição a
+    # uma coisa que ainda não mede nada.
+    #
+    # O que isto faz é pôr as três pontas lado a lado para se poderem ler
+    # de seguida. Quando houver turnos que cheguem, a Fase 4.b escolhe a
+    # métrica com dados; até lá, lê-se.
+    pesquisas = []
+
+    for turno in turnos:
+        for ferramenta in turno.get("ferramentas") or []:
+            args = ferramenta.get("args") or {}
+
+            if args.get("action") == "play_search":
+                pesquisas.append((turno, ferramenta, args))
+
+    if pesquisas:
+        print(f"Pesquisas ({len(pesquisas)})")
+        print("  pediste / procurou / tocou")
+        print()
+
+        for turno, ferramenta, args in pesquisas[-15:]:
+            escolhido = ferramenta.get("escolhido") or {}
+
+            if escolhido.get("nome"):
+                artista = escolhido.get("artista")
+                tocou = escolhido["nome"] + (f", de {artista}" if artista else "")
+
+            elif ferramenta.get("ok"):
+                # Turnos anteriores a 2026-10-14 não têm o campo, e os
+                # "não encontrei nada" nunca chegam a escolher.
+                tocou = "—"
+
+            else:
+                tocou = f"FALHOU: {ferramenta.get('message', '')}"
+
+            print(f"  {turno.get('ts', '')[:16]}  [{args.get('tipo')}]")
+            print(f"     pediste: {turno.get('ouvido') or '—'}")
+            print(f"     procurou: {args.get('query')!r}")
+            print(f"     tocou:   {tocou}")
+
+        print()
+
+    # -----------------------------------------------------------------
     # ERROS
     # -----------------------------------------------------------------
     erros = [t for t in turnos if t.get("erro")]
@@ -414,10 +467,31 @@ def listar(turnos):
 
         for ferramenta in turno.get("ferramentas") or []:
             estado = "ok" if ferramenta.get("ok") else "FALHOU"
+
             print(
                 f"    tool:   {ferramenta.get('nome')}"
                 f"({ferramenta.get('args')}) -> {estado}"
             )
+
+            # Quando falha, o que interessa é o motivo — não o facto.
+            if not ferramenta.get("ok") and ferramenta.get("message"):
+                print(f"            {ferramenta['message']}")
+
+            # Quando corre bem, o que interessa é se tocou o que foi pedido.
+            #
+            # Impresso desde 2026-10-14 (Fase 4.a). Posto por baixo da
+            # `query`, de propósito: lado a lado, vê-se de relance que
+            # `'Canakkale'` trouxe `Çanakkale, de CVRTOON` — e que ninguém
+            # se portou mal, o pedido é que já vinha errado.
+            escolhido = ferramenta.get("escolhido") or {}
+
+            if escolhido.get("nome"):
+                artista = escolhido.get("artista")
+
+                print(
+                    f"            tocou:  {escolhido['nome']}"
+                    + (f", de {artista}" if artista else "")
+                )
 
         if turno.get("erro"):
             print(f"    erro:   {turno['erro']}")

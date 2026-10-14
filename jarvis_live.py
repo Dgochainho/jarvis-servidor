@@ -111,7 +111,29 @@ SPOTIFY_CONTROL_DECLARATION = {
             "action": {
                 "type": "string",
                 "enum": SPOTIFY_ACTIONS,
-                "description": "A ação Spotify a executar.",
+
+                # Esta descrição existe por causa de uma falha em campo a
+                # 2026-10-03: o utilizador pediu "põe Let It Happen" e o
+                # modelo chamou `next`. O enum sozinho não diz o que cada
+                # valor faz, e `play_search` não se explica pelo nome.
+                #
+                # Por contraste, o `end_conversation` nunca se enganou — e
+                # a diferença é ter uma descrição com exemplos.
+                "description": (
+                    "O que fazer:\n"
+                    "- pause: parar a reprodução\n"
+                    "- resume: retomar o que estava parado\n"
+                    "- next: saltar para a música seguinte "
+                    "(\"passa esta\", \"próxima\")\n"
+                    "- previous: voltar à anterior\n"
+                    "- current_track: dizer o que está a tocar\n"
+                    "- set_volume: mudar o volume\n"
+                    "- play_search: pôr a tocar uma coisa concreta que o "
+                    "utilizador nomeou (\"põe Tame Impala\", \"toca Let It "
+                    "Happen\", \"quero ouvir o álbum Currents\"). "
+                    "Usa sempre esta quando houver um nome; NUNCA uses "
+                    "`next` para tentar chegar a uma música específica."
+                ),
             },
             "volume": {
                 "type": "integer",
@@ -213,6 +235,27 @@ SYSTEM_INSTRUCTION = (
     "end_conversation. Um agradecimento a meio da conversa não é uma "
     "despedida."
 )
+
+
+def descrever_ferramentas():
+    """
+    Uma linha a dizer o que esta versão sabe fazer.
+
+    Impressa no arranque do servidor. Existe para responder, de uma vez e
+    sem adivinhar, à pergunta que apareceu a 2026-10-03: "o servidor que
+    correu estes turnos tinha o código novo, ou eu esqueci-me de o
+    reiniciar?"
+
+    Sem isto, a resposta era olhar para o comportamento do modelo e
+    inferir — que é exactamente o género de inferência que já me enganou
+    várias vezes nesta sessão.
+    """
+    nomes = [d["name"] for d in FUNCTION_DECLARATIONS]
+
+    return (
+        f"Ferramentas Gemini: {', '.join(nomes)} | "
+        f"acções Spotify: {', '.join(SPOTIFY_ACTIONS)}"
+    )
 
 
 def build_live_config():
@@ -331,10 +374,33 @@ async def dispatch_tool_calls(tool_call, log_prefix):
             )
         )
 
-        registos.append({
+        registo = {
             "nome": fc.name,
             "args": dict(fc.args or {}),
             "ok": bool(result.get("ok")),
-        })
+
+            # A mensagem vai junto desde 2026-10-03.
+            #
+            # Nesse dia uma chamada apareceu no registo como
+            # `spotify_control({'action': 'next'}) -> FALHOU` e não houve
+            # maneira de saber porquê: sem dispositivo? 403? excepção? O
+            # `ok` sozinho diz que correu mal e esconde tudo o que
+            # interessa para corrigir.
+            "message": result.get("message", ""),
+        }
+
+        # O item escolhido pelo `play_search`, desde 2026-10-14 (Fase 4.a).
+        #
+        # Fecha o triângulo que o problema F4 precisa: o registo de turnos
+        # já tinha o que o utilizador disse (`ouvido`) e o que o modelo
+        # procurou (`args.query`); faltava o que acabou a tocar.
+        #
+        # Sem este campo, a única pista era a frase dita pelo Jarvis, e
+        # comparar centenas de turnos a partir de prosa não é análise, é
+        # adivinhação com mais passos.
+        if result.get("escolhido"):
+            registo["escolhido"] = result["escolhido"]
+
+        registos.append(registo)
 
     return function_responses, registos

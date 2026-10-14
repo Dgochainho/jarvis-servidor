@@ -292,6 +292,26 @@ def _tocar_pesquisa(accao, query, tipo):
             "query": query,
             "tipo": tipo,
             "uri": uri,
+
+            # O que o Spotify escolheu, em campos próprios.
+            #
+            # Acrescentado a 2026-10-14 para a Fase 4.a. O nome já existia
+            # dentro da `message` ("A tocar Çanakkale, de CVRTOON"), mas só
+            # em prosa — e a Fase 4.b vai precisar de comparar o que foi
+            # pedido com o que foi tocado, em centenas de turnos. Tirar isso
+            # de uma frase, meses depois, é frágil e irrepetível.
+            #
+            # Não se guarda aqui nenhuma distância nem veredicto. A análise
+            # de 14-10 mostrou que nenhuma das métricas candidatas separava
+            # os casos reais dos falsos positivos; registar um número
+            # calculado hoje seria congelar uma escolha que ainda não há
+            # dados para fazer. Guarda-se a matéria-prima.
+            "escolhido": {
+                "nome": escolhido.get("name"),
+                "artista": _artistas(escolhido),
+                "uri": uri,
+            },
+
             "message": _descrever(escolhido, tipo),
         }
 
