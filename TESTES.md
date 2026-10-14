@@ -286,7 +286,7 @@ tool: spotify_control({'action': 'play_search', 'query': '...', 'tipo': 'track'}
   dizia-o, e tinha razão.
 - aparecer `Não consegui pesquisar no Spotify agora.` — ver T28.
 
-### T23 · Tipo correcto ⏳
+### T23 · Tipo correcto
 
 Três pedidos seguidos: **"põe Tame Impala"** (artista), **"põe Do I Wanna
 Know"** (faixa), **"põe o álbum Currents"** (álbum).
@@ -298,10 +298,12 @@ porque "Tame Impala" é um artista e "Do I Wanna Know" é uma faixa, e nenhuma
 regra fixa deste lado acerta nos dois.
 
 Importa porque faixas tocam por `uris` e o resto por `context_uri` — são ramos
-diferentes do código. **Por correr:** até 2026-10-06 só o `track` foi exercitado
-em campo.
+diferentes do código.
 
-### T24 · Sem dispositivo activo ⏳
+**Corrido a 2026-10-14**, com `artist`, `track` e `album` todos a `ok`. Foi a
+primeira vez que o `context_uri` correu em campo.
+
+### T24 · Sem dispositivo activo
 
 Fechar o Spotify em **todos** os dispositivos. Dizer **"Jarvis, põe Tame
 Impala"**.
@@ -311,17 +313,58 @@ Impala"**.
 dispositivo e pôr música a tocar noutro sítio da casa.
 **Falha se:** excepção no log, silêncio, ou o turno abortar.
 
-**Por correr.**
+Confirmar também no `log-servidor.txt` a linha do `_registar_recusa`, que leva a
+resposta inteira do Spotify:
 
-### T25 · Pesquisa sem resultados ⏳
+```
+[ACCAO] play_search recusado com 404: {
+  "error" : {
+    "status" : 404,
+    "message" : "Player command failed: No active device found",
+    "reason" : "NO_ACTIVE_DEVICE"
+  }
+}
+```
 
-Dizer **"Jarvis, põe zxqwverty"**.
+**Corrido a 2026-10-14.** Passou, e foi a primeira vez que o `_registar_recusa`
+da Fase 2 chegou a correr.
 
-**Esperado:** resposta falada a dizer que não encontrou nada com esse nome, e
-`ok: True` — não encontrar não é uma falha do sistema.
-**Falha se:** excepção, ou começar a tocar outra coisa qualquer.
+### T25 · Pesquisa sem resultados
 
-**Por correr.**
+Sem a BOX, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_sem_resultados.py
+```
+
+**Esperado:** `PASSA`, com `ok: True` e a mensagem *"Não encontrei nada com o
+nome ..."*.
+**Falha se:** `ok: False`. Não encontrar não é uma avaria — se for tratado como
+erro, o Jarvis pede desculpa de uma coisa que não aconteceu.
+
+**Não é um teste de voz, e isso foi medido.** O enunciado original era dizer
+*"Jarvis, põe zxqwverty"*. Não serve por duas razões:
+
+1. "zxqwverty" dito em voz alta não chega ao servidor como "zxqwverty" — chega
+   como outra coisa que o Gemini percebeu, e essa outra coisa costuma existir.
+2. **A pesquisa do Spotify nunca devolve vazio.** Medido a 2026-10-07: sete
+   strings de consoantes aleatórias, até 45 caracteres, nos quatro tipos —
+   *todas* devolveram pelo menos um resultado.
+
+Por isso o script tem duas fases: tenta encontrar uma string que o Spotify
+recuse e, se não conseguir, substitui o `search` por um que devolve lista vazia
+e corre o mesmo `execute_spotify_action`. Deixa de provar que a API devolve
+vazio e passa a provar que o nosso código trata o vazio como deve — que é a
+parte que nos pertence. O script diz qual das duas aconteceu, e um
+`PASSA (simulado)` **regista-se como "OK (simulado)"**, não como "OK".
+
+> **O que este teste descobriu, e é mais importante do que ele.** Se o Spotify
+> devolve sempre alguma coisa, então ao pedir uma música que não existe o
+> Jarvis não diz "não encontrei": põe a tocar o que calhou ser mais parecido,
+> com toda a convicção. O ramo vazio é quase teórico; o falso positivo de
+> pesquisa é real e não tem teste nenhum. Candidato a uma fase própria —
+> comparar o nome devolvido com o pedido e, abaixo de certa semelhança,
+> perguntar em vez de tocar.
 
 ### T26 · Volume por voz
 
@@ -518,13 +561,47 @@ Uma única sessão de voz, seis turnos:
 | Teste | Estado | Nota |
 |---|---|---|
 | T22 Pôr a tocar por nome | **OK** | `play_search`, `tipo: track`, faixa certa |
-| T23 Tipo correcto | — | só `track` exercitado |
-| T24 Sem dispositivo activo | — | por correr |
-| T25 Pesquisa sem resultados | — | por correr |
+| T23 Tipo correcto | **OK** | 14-10: artist, track e album; `context_uri` em campo |
+| T24 Sem dispositivo activo | **OK** | 14-10: 404 NO_ACTIVE_DEVICE, dito em voz alta |
+| T25 Pesquisa sem resultados | **OK (simulado)** | a API nunca devolve vazio — ver o teste |
 | T26 Volume por voz | **OK** | 60% |
 | T27 Transporte devolve 2xx | **OK** | `next -> ok`; era `FALHOU / erro 200` |
 | T28 Pesquisa (diagnóstico) | **OK** | quatro variantes a 200 |
 | T14, T15 | **substituídos** | eram "não implementado"; passam a T22 e T26 |
+
+### F4 — a pesquisa acerta sempre, mesmo quando devia falhar
+
+Dois dos oito turnos de 14-10 puseram a tocar uma coisa que não foi pedida, sem
+nenhum sinal de que algo tinha corrido mal:
+
+```
+tu:     Puente Canakkale
+jarvis: A tocar Çanakkale de CVRTOON.
+tool:   play_search({'query': 'Canakkale', 'tipo': 'track'}) -> ok
+        (o Dinis corrigiu no turno seguinte: "Desculpa, é Takanaka")
+
+tu:     Pon agora a tocar Timbalada.
+tool:   play_search({'query': 'Tame Impala', 'tipo': 'artist'})
+```
+
+O segundo é o mais sério, e não é da pesquisa: o utilizador disse **Timbalada**
+— que é uma banda real — e o modelo enviou **Tame Impala**, por ser o que se
+andava a tocar. Uma substituição silenciosa, antes de a pesquisa sequer começar.
+
+Juntando ao que o T25 mediu (a API nunca devolve vazio), há dois caminhos para o
+mesmo sintoma:
+
+| Onde | O que acontece |
+|---|---|
+| no modelo | troca o nome mal percebido por um parecido que tem em contexto |
+| no Spotify | devolve sempre o mais próximo, por muito distante que seja |
+
+Em nenhum dos dois há como o sistema dizer "não tenho a certeza". O `ok` é
+sempre `True`, a resposta é sempre convicta, e a correcção fica toda do lado do
+utilizador — que tem de ouvir a música errada para perceber.
+
+**2 em 8 turnos nesta sessão.** É um número pequeno e de uma sessão só, mas é o
+primeiro que existe. Fica como critério para uma fase própria.
 
 ### O que este baseline não prova
 
