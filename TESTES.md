@@ -603,6 +603,40 @@ utilizador — que tem de ouvir a música errada para perceber.
 **2 em 8 turnos nesta sessão.** É um número pequeno e de uma sessão só, mas é o
 primeiro que existe. Fica como critério para uma fase própria.
 
+> **Correcção, 2026-10-14 (à noite) — o número acima está mal construído, e o
+> F4 é muito menor do que eu escrevi.**
+>
+> Fui contar o histórico inteiro em vez de uma sessão. Das **14** chamadas
+> `play_search` que existem, **6 nunca chegaram a tocar nada** (cinco mortas
+> pelo 403 da pesquisa, uma pelo 404 sem dispositivo). Sobram **8** que
+> puseram mesmo música a tocar.
+>
+> Dessas 8, **uma** tocou a coisa errada: o Çanakkale. E a causa dessa é a
+> **A** — a transcrição ouviu outra coisa — que esta fase não resolve nem
+> pretende resolver.
+>
+> Os dois casos que eu tinha classificado como substituição a sério nunca
+> chegaram ao altifalante: o Timbalada morreu no 404 e o soletrado no 403.
+> Nenhum deles foi uma música errada que alguém tenha ouvido.
+>
+> E o Timbalada tem contexto que eu não tinha olhado: aconteceu **um turno
+> depois** de o Dinis ter dito *"põe o álbum Currents do Tame Impala"*. O
+> modelo tinha o nome fresco e um "Timbalada" foneticamente próximo. Em uso
+> normal essa sequência não acontece — foi a própria sessão de testes a
+> fabricá-la.
+>
+> Contado assim, o F4 é **1 em 8**, de causa indetectável. O Dinis disse que
+> em uso normal funciona na grande maioria das vezes, e os dados dão-lhe
+> razão.
+>
+> É o mesmo padrão da Fase 3.2: um sintoma que parecia do sistema e era
+> artefacto das condições de medição. A diferença é que desta vez custou um
+> documento de desenho, não uma semana de hipóteses erradas.
+>
+> **O que fica:** a 4.a já está feita e não custa nada — é só registo. Deixa
+> de haver razão para a 4.b e a 4.c até os dados de uso real mostrarem alguma
+> coisa. A prioridade passa para a **Fase 3.1**.
+
 ### O que este baseline não prova
 
 - **T22 só foi exercitado com `tipo: track`.** Artista e álbum usam
