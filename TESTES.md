@@ -63,7 +63,10 @@ de repetir essa linha, uma vez só:
 [Environment]::SetEnvironmentVariable("IDF_TOOLS_PATH", "C:\Espressif", "User")
 ```
 
-Sair do monitor: **Ctrl+]** (o Ctrl+C reinicia a BOX).
+**Sair do monitor: `Ctrl+T` seguido de `Ctrl+X`.** (O `Ctrl+]` da documentação
+também serve, mas no teclado português o `]` é AltGr+9 e o atalho fica
+desconfortável.) **Não fechar a janela no X** — deixa o processo agarrado ao
+COM9 e a gravação seguinte falha com *acesso negado*.
 
 Ter o Spotify a tocar num dispositivo antes de começar. Ficar a ~1 m da BOX,
 com a sala em silêncio, salvo indicação em contrário.
@@ -85,6 +88,9 @@ Ligar a BOX com o servidor já a correr.
 
 **Esperado:** `Ligado ao Wi-Fi!` · `Spotify Service encontrado!` · `WebSocket Live persistente ligado ao PC` · `Servidor Live pronto` (READY) · no servidor, `BOX persistente ligada`.
 **Falha se:** ficar em `WS persistente ainda indisponivel` mais de ~10 s com o servidor a correr.
+
+⚠️ A 2026-10-16 o `Servidor Live pronto` **não apareceu** num arranque, e a BOX
+recriou o WebSocket aos 10 s apesar de já estar ligada. É a Fase 7, por fazer.
 
 ---
 
@@ -176,6 +182,12 @@ arrastar uma cadeira) dentro da janela de 30 s.
 
 **Esperado:** ignorado.
 **Falha se:** abrir um turno. **Critério da Fase 3.2.** Anotar em 3 tentativas.
+
+> **2026-10-16 — estes dois já não são critério de fase nenhuma.** A Fase 3.1
+> nunca chegou a abrir: medidos 155 turnos, só 3 caíram durante a própria
+> resposta da BOX. A Fase 3.2 ficou aceite por decisão do Dinis — o resto é som
+> externo, e não se pede ao programa que ignore conversas alheias sem estragar
+> a recepção. O T12 e o T13 continuam a correr-se como observação.
 
 ---
 
@@ -417,6 +429,33 @@ Spotify ir ver o país da conta e por isso exige o scope `user-read-private`, qu
 não pedimos. Está agora escrito à mão (`MERCADO = "PT"`). Se um dia alguém puser
 `from_token` outra vez, este teste apanha-o antes de a BOX apanhar.
 
+### T29 · Escada da wake word
+
+**Não é um teste de passa/falha. É a medição contra a qual a Fase 6 se mede.**
+
+Com a BOX ligada e o indicador de escuta visível (Fase 5), sempre **à mesma
+distância**, dizer "Jarvis" quinze vezes e contar quantas acendem verde:
+
+| Degrau | Vezes | Como |
+|---|---|---|
+| normal | 5 | a voz com que falas com ele todos os dias |
+| mais baixo | 5 | como quem não quer acordar ninguém |
+| no limite | 5 | sussurro |
+
+Registar **os três números separados**, não o total. O que interessa não é a
+taxa global — é se o degrau de baixo se comporta pior do que o de cima.
+
+**Porque é que isto existe:** até à Fase 5 não havia maneira de contar wake
+words falhadas. Uma que não dispara não deixa rasto no `turnos.jsonl`, no log
+do servidor, nem em parte nenhuma. O indicador é o único instrumento possível,
+e esta escada é o que ele mede.
+
+**Cuidado com a contaminação:** o indicador muda o comportamento de quem testa.
+Saber imediatamente se resultou faz com que se aprenda a dizer "Jarvis" melhor,
+e isso sobe a taxa sem que nada no firmware tenha mudado. Distância fixa reduz
+o efeito; não o elimina. Em comparações futuras, desconfiar de melhorias
+pequenas.
+
 ---
 
 ## Registo
@@ -537,6 +576,13 @@ fonte acústica repetida — provavelmente a cauda da própria voz da BOX, que s
 AEC não há nada a filtrar.
 
 Isto passa a ser o critério de aceitação da Fase 3.2: **19%, medido.**
+
+> **Corrigido a 2026-10-16.** A atribuição à cauda da própria voz da BOX estava
+> errada. Medidos 155 turnos concluídos: 17 sem fala reconhecida (11%), e dos
+> 11 com dados de tempo, **apenas 3 caíram durante a própria resposta**. Os
+> outros são som externo — outras pessoas a falar na sala. Decisão do Dinis:
+> aceitar. Não se pede ao programa que ignore conversas alheias sem estragar a
+> recepção do resto.
 
 ---
 
@@ -659,3 +705,55 @@ Nota sobre o turno das 17:27:53: 9,37 s, dos quais 3,28 s em ferramenta. É o
 turno mais lento dos seis, e é o `play_search` — duas chamadas à API do Spotify
 (pesquisa + reprodução) em vez de uma. Vale a pena voltar a medir com mais
 amostras antes de decidir se é para optimizar.
+
+---
+
+## Baseline 4 — 2026-10-16 · wake word
+
+Firmware: Fase 5 (indicador de escuta). Nada mudou no reconhecimento — o
+indicador não toca no WakeNet. Esta baseline mede o que **sempre** lá esteve e
+nunca tinha sido medido.
+
+### T29 · escada
+
+```
+normal      4/5
+mais baixo  5/5
+no limite   4/5    (sussurro)
+```
+
+Mais uma série anterior, de exploração livre com o volume a variar: **17/20**.
+
+**Total: 30 em 35 — cerca de 86%.** Duas séries independentes a concordar.
+Aproximadamente **1 em cada 7 "Jarvis" falha.**
+
+### O que a escada diz, e que contraria a hipótese de partida
+
+**Não há gradiente de volume.** O sussurro foi tão bem como a voz normal.
+
+Com uma taxa de fundo de 86%, um degrau de 5 tentativas dá 5/5 em 46% das vezes
+e 4/5 em 39%. Um resultado de 4-5-4 é precisamente o mais provável se os três
+degraus forem iguais. Não há ali sinal nenhum.
+
+Isto derruba a hipótese em que assentava a ordem das alavancas da Fase 6. Se a
+BOX ouve um sussurro, **não é um problema de nível** — o microfone e o AFE têm
+folga de sobra, e o AGC, que existe para normalizar o nível, deixa de ser o
+candidato óbvio.
+
+O que resta é a queixa original: *"custa acertar com o tom"*. Um modelo
+treinado com voz sintetizada (`wn9_jarvis_tts`) falha em **certas pronúncias**,
+não em certos volumes — e o sintoma bate certo.
+
+### Limite desta medição
+
+Cinco tentativas por degrau só detectam um efeito grande. Se o degrau do
+sussurro tivesse dado 1/5, era sinal; dar 4/5 não prova que não há efeito
+nenhum, prova que não há um efeito grande.
+
+Os 86% globais, esses, assentam em 35 tentativas e são o número a bater.
+
+### Decisão
+
+**Fase 6 suspensa.** O Dinis considerou o estado actual suficiente e não quis
+mais alterações por agora. As alavancas ficam identificadas e por usar; os 86%
+ficam como referência para quando se lhes pegar.
