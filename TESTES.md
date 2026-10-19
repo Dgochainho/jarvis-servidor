@@ -92,6 +92,16 @@ Ligar a BOX com o servidor já a correr.
 ⚠️ A 2026-10-16 o `Servidor Live pronto` **não apareceu** num arranque, e a BOX
 recriou o WebSocket aos 10 s apesar de já estar ligada. É a Fase 7, por fazer.
 
+> **2026-10-19 — Fase 7 fechada.** Quatro arranques seguidos com o READY a
+> chegar em ~220 ms. A causa provada foi o servidor recusar a ligação nova
+> enquanto segurava a antiga, já morta: o `close(1013)` é um fecho limpo, e um
+> fecho limpo matava o cliente WebSocket da BOX de vez. Corrigido dos dois
+> lados — ver o T30 e a Baseline 5.
+>
+> **O arranque de 16-10 em si continua sem explicação fechada:** o log do
+> servidor desse dia mostra `READY enviado` nessa ligação, o que não encaixa
+> com uma recusa. O instrumento para o apanhar, se voltar, está montado.
+
 ---
 
 ## B — Spotify pelo LCD *(já funciona — não pode regredir)*
@@ -456,6 +466,42 @@ e isso sobe a taxa sem que nada no firmware tenha mudado. Distância fixa reduz
 o efeito; não o elimina. Em comparações futuras, desconfiar de melhorias
 pequenas.
 
+### T30 · Corte de alimentação à BOX ⚠️
+
+**Tem de ser corte de corrente, não o botão de reset.** Com o reset o servidor
+costuma dar pela morte da ligação antes de a BOX voltar, e o caminho que
+interessa nem chega a ser percorrido — foi o que aconteceu a 19-10 e por pouco
+não se dava o teste por feito sem o ter sido.
+
+Com a BOX ligada e a funcionar, tirar-lhe a ficha e voltar a pô-la.
+
+**Esperado**, no `log-servidor.txt`:
+
+```
+[VOICE-WS] Ligação nova de (...); a expulsar a anterior ((...))
+[VOICE-WS] Ligação fechada: code=1006
+[VOICE-WS] BOX desligada: (a antiga)
+[VOICE-WS] BOX persistente ligada: (a nova)
+[VOICE-WS] READY enviado
+```
+
+e no monitor o `Servidor Live pronto` em poucas centenas de ms, sem o
+`WS sem CONNECTED+READY`.
+
+**Falha se:** `Ligação recusada (1013): a anterior não largou o lugar em 5 s`.
+A partir da Fase 7.d esse 1013 deixou de querer dizer *já existe uma BOX* e
+passa a querer dizer *a anterior está presa* — é um sintoma novo, não o antigo.
+
+**Porque é que o corte de corrente é o teste e o reset não:** sem corrente a
+BOX não se despede, o servidor fica com o cadáver agarrado ao lugar até ao
+timeout do ping (até ~40 s), e a BOX volta em ~6 s. É a única maneira fácil de
+garantir que a ligação nova chega com o lugar ainda ocupado.
+
+**O que NÃO se consegue ver neste teste:** a linha
+`WebSocket Live fechado pelo servidor (codigo 1012)` no monitor. Quem leva com
+o 1012 é a BOX antiga, que está sem corrente e não regista nada. Essa linha só
+aparece se uma BOX *viva* for alguma vez substituída.
+
 ---
 
 ## Registo
@@ -757,3 +803,47 @@ Os 86% globais, esses, assentam em 35 tentativas e são o número a bater.
 **Fase 6 suspensa.** O Dinis considerou o estado actual suficiente e não quis
 mais alterações por agora. As alavancas ficam identificadas e por usar; os 86%
 ficam como referência para quando se lhes pegar.
+
+---
+
+## Baseline 5 — 2026-10-19 · fecho da Fase 7
+
+Firmware: `enable_close_reconnect` + log no `WEBSOCKET_EVENT_CLOSED` ·
+Servidor: a ligação nova expulsa a anterior, e as recusas deixam de ser mudas
+
+### Resultados
+
+| Teste | Estado | Nota |
+|---|---|---|
+| T02 BOX encontra o serviço | **OK** | quatro arranques, READY em ~220 ms |
+| T30 Corte de alimentação | **OK** | a expulsão disparou; ver abaixo |
+
+### T30 — a prova
+
+```
+17:45:27  (último /api/status da BOX antiga)
+          Ligação nova de (60613); a expulsar a anterior ((52039))
+          Ligação fechada: code=1006
+          BOX desligada: (52039)
+          BOX persistente ligada: (60613)
+          READY enviado
+```
+
+O `code=1006` aparece **depois** do nosso pedido de fecho: fomos nós que o
+provocámos. Ou seja, o lugar estava mesmo ocupado pelo cadáver quando a BOX
+nova chegou — o servidor ainda não tinha dado pela morte. Antes da 7.d aquela
+primeira linha teria sido um `1013`, e antes da 7.b esse 1013 teria matado o
+cliente da BOX e custado os 10 segundos.
+
+### O que este baseline não prova
+
+- **O arranque de 16-10 continua por explicar.** O log do servidor desse dia
+  mostra `READY enviado` na ligação em causa, o que não encaixa com uma recusa
+  por 1013. Corrigiram-se dois defeitos reais e provados; o sintoma original
+  nunca chegou a ser reproduzido. A instrumentação da 7.a fica montada.
+- **A 7.c não foi feita.** O `VOICE_WS_STALE_RECREATE_MS` de 10 s continua a
+  ser a rede de segurança, e continua largo de mais para o arranque. Só deixou
+  de ser preciso.
+- **Os 95 s de mDNS de 18-10** não foram investigados. Aconteceram contra um
+  servidor que tinha passado horas com o event loop bloqueado (o portátil a
+  dormir). É hipótese, não conclusão, e é candidato a fase própria.

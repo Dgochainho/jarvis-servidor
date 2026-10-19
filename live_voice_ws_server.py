@@ -18,6 +18,7 @@ from jarvis_live import (
     MODEL,
     Pcm24kTo16k,
     build_live_config,
+    descrever_ferramentas,
     dispatch_tool_calls,
 )
 from turn_log import registar_turno, segundos
@@ -34,6 +35,18 @@ if not API_KEY:
 
 
 VOICE_WS_PATH = "/voice"
+
+# Fase 7.d: quanto esperamos que a ligação anterior largue o lugar depois
+# de a mandarmos fechar. Cinco segundos é muito mais do que o necessário
+# para um fecho limpo numa rede local; se nem assim largar, há ali coisa
+# pior e recusamos a nova, agora com log.
+VOICE_WS_EVICT_TIMEOUT_SECONDS = 5.0
+
+# Quanto esperamos pelo handshake de fecho da ligação anterior. Se ela
+# estiver morta (o caso normal: uma BOX que fez reset), isto esgota-se e
+# a biblioteca aborta o TCP -- que é o que liberta o lugar. Curto de
+# propósito: somado ao de cima é o pior caso desta operação toda.
+VOICE_WS_CLOSE_TIMEOUT_SECONDS = 2.0
 
 # A BOX cancela sozinha se não encontrar fala poucos segundos após WAKE.
 TURN_START_TIMEOUT_SECONDS = 10
@@ -201,6 +214,7 @@ class LiveVoiceWebSocketServer:
         self._started = threading.Event()
         self._startup_error: Optional[BaseException] = None
         self._connection_lock: Optional[asyncio.Lock] = None
+        self._active_ws: Optional[ServerConnection] = None
 
     def start(
         self,
@@ -423,6 +437,9 @@ class LiveVoiceWebSocketServer:
                 f"ws://{self.host}:{self.port}{VOICE_WS_PATH}"
             )
             print(
+                f"[VOICE-WS] {descrever_ferramentas()}"
+            )
+            print(
                 "[VOICE-WS] ====================================="
             )
             print()
@@ -446,6 +463,11 @@ class LiveVoiceWebSocketServer:
         )
 
         if path != VOICE_WS_PATH:
+            print(
+                "[VOICE-WS] Ligação recusada (1008): "
+                f"caminho {path!r} de {websocket.remote_address}"
+            )
+
             await websocket.close(
                 code=1008,
                 reason="Caminho WebSocket inválido",
@@ -454,15 +476,10 @@ class LiveVoiceWebSocketServer:
 
         assert self._connection_lock is not None
 
-        # Só existe uma BOX. Não deixamos uma segunda ligação pendurada.
-        if self._connection_lock.locked():
-            await websocket.close(
-                code=1013,
-                reason="Já existe uma BOX ligada",
-            )
+        if not await self._ocupar_lugar(websocket):
             return
 
-        async with self._connection_lock:
+        try:
             peer = websocket.remote_address
             print(
                 f"[VOICE-WS] BOX persistente ligada: {peer}"
@@ -565,6 +582,101 @@ class LiveVoiceWebSocketServer:
                 print(
                     f"[VOICE-WS] BOX desligada: {peer}"
                 )
+
+        finally:
+            # Só limpamos a referência se o lugar ainda for nosso.
+            if self._active_ws is websocket:
+                self._active_ws = None
+
+            self._connection_lock.release()
+
+    async def _ocupar_lugar(
+        self,
+        websocket: ServerConnection,
+    ) -> bool:
+        """
+        Dá o lugar único de BOX a esta ligação, expulsando quem lá estiver.
+
+        Fase 7.d. Até 2026-10-19 uma segunda ligação era recusada com um
+        close(1013). Duas coisas estavam erradas nisso:
+
+        1. Esse fecho é LIMPO, e um fecho limpo matava o cliente
+           WebSocket da BOX de vez -- ver a 7.b. A BOX só recuperava
+           pelo temporizador de 10 s, e eram esses os 10 s perdidos no
+           arranque que ninguém conseguia explicar.
+
+        2. A ligação recusada era quase sempre a VIVA. Uma BOX que faz
+           reset não envia FIN nenhum, por isso o servidor fica com o
+           cadáver da anterior agarrado ao lugar -- e, se o event loop
+           tiver estado bloqueado (o portátil a dormir), fica com ele
+           agarrado durante horas. Recusar a nova era escolher o morto.
+
+        Agora quem chega expulsa quem lá está. Só existe uma BOX; se um
+        dia houver duas, isto vira um empurra-empurra e passa a ser
+        preciso identificá-las em vez de assumir.
+        """
+        assert self._connection_lock is not None
+
+        if self._connection_lock.locked():
+            antiga = self._active_ws
+
+            print(
+                "[VOICE-WS] Ligação nova de "
+                f"{websocket.remote_address}; a expulsar a anterior "
+                f"({antiga.remote_address if antiga is not None else '?'})"
+            )
+
+            if antiga is not None:
+                try:
+                    # 1012 de propósito, e não 1013: na BOX isto sai no
+                    # monitor como "fechado pelo servidor (codigo 1012)",
+                    # e esse número não é usado em mais lado nenhum deste
+                    # servidor. Quem ler o log sabe logo que foi
+                    # substituição, e não outra coisa qualquer.
+                    await asyncio.wait_for(
+                        antiga.close(
+                            code=1012,
+                            reason="Substituída por uma ligação nova",
+                        ),
+                        timeout=VOICE_WS_CLOSE_TIMEOUT_SECONDS,
+                    )
+
+                except asyncio.TimeoutError:
+                    print(
+                        "[VOICE-WS] A anterior não respondeu ao fecho em "
+                        f"{VOICE_WS_CLOSE_TIMEOUT_SECONDS:.0f} s "
+                        "(estava morta); seguimos à mesma"
+                    )
+
+                except Exception as exc:
+                    print(
+                        "[VOICE-WS] Falha a fechar a ligação anterior: "
+                        f"{self._format_exception(exc)}"
+                    )
+
+        try:
+            await asyncio.wait_for(
+                self._connection_lock.acquire(),
+                timeout=VOICE_WS_EVICT_TIMEOUT_SECONDS,
+            )
+
+        except asyncio.TimeoutError:
+            # Último recurso, e agora com log. Se isto aparecer, a
+            # ligação anterior está presa em sítio nenhum bom.
+            print(
+                "[VOICE-WS] Ligação recusada (1013): a anterior não "
+                f"largou o lugar em {VOICE_WS_EVICT_TIMEOUT_SECONDS:.0f} s; "
+                f"recusado {websocket.remote_address}"
+            )
+
+            await websocket.close(
+                code=1013,
+                reason="Já existe uma BOX ligada",
+            )
+            return False
+
+        self._active_ws = websocket
+        return True
 
     async def _run_conversation(
         self,
