@@ -411,6 +411,193 @@ def api_cover():
     )
 
 # ---------------------------------------------------------
+# PALETA DA CAPA  (Fase 8.a)
+# ---------------------------------------------------------
+
+# Endpoint próprio, e não um campo no /api/status.
+#
+# O /api/status está no ciclo de polling da BOX, de 5 em 5 segundos, e
+# tem medição [PERF] desde a Fase 1.3. Acrescentar-lhe trabalho estragava
+# a comparação com as baselines de Setembro e arriscava latência no único
+# sítio que a BOX chama sem parar.
+
+@app.route("/api/paleta")
+def api_paleta():
+
+    status, status_code = (
+        spotify.get_status(
+            max_age_seconds=3.0
+        )
+    )
+
+    if status_code != 200:
+
+        return (
+            jsonify({
+                "activo": False,
+                "motivo": "estado Spotify indisponivel",
+            }),
+            status_code
+        )
+
+    # Sem reprodução devolvemos 200 com a bandeira em baixo, e não 404.
+    #
+    # Quem vai consumir isto é o nó dos LEDs, de poucos em poucos
+    # segundos. Um 404 de rotina obriga-o a distinguir "não está a tocar"
+    # de "o servidor não responde", que é precisamente a distinção que
+    # interessa manter clara.
+    if not status.get("active"):
+
+        return jsonify({
+            "activo": False,
+            "motivo": "sem reproducao activa",
+        })
+
+
+    cover_url = status.get("cover")
+
+    if not cover_url:
+
+        return jsonify({
+            "activo": True,
+            "motivo": "faixa sem capa",
+            "faixa": status.get("track"),
+            "artista": status.get("artist"),
+        })
+
+
+    try:
+        paleta = cover_service.get_paleta(cover_url)
+
+    except Exception as error:
+
+        print(
+            "Erro ao extrair paleta:",
+            error
+        )
+
+        return (
+            jsonify({
+                "activo": True,
+                "motivo": "falha ao extrair a paleta",
+            }),
+            500
+        )
+
+
+    corpo = {
+        "activo": True,
+        "faixa": status.get("track"),
+        "artista": status.get("artist"),
+        "album": status.get("album"),
+        "capa": cover_url,
+    }
+
+    if paleta:
+        corpo.update(paleta)
+
+    resposta = jsonify(corpo)
+    resposta.headers["Cache-Control"] = "no-store"
+
+    return resposta
+
+
+# Página para olhar enquanto não há LEDs nenhuns. É o critério de
+# aceitação da 8.a: mudar de faixa e ver a paleta mudar.
+
+PAGINA_PALETA = """<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<title>Paleta da capa</title>
+<style>
+  body { margin:0; background:#0b0b0d; color:#e8e8ea;
+         font:15px/1.5 system-ui, sans-serif; padding:32px; }
+  h1   { font-size:17px; font-weight:600; margin:0 0 4px; }
+  .sub { color:#8a8a92; margin-bottom:28px; }
+  .linha { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; }
+  img  { width:200px; height:200px; border-radius:8px; display:block;
+         background:#17171a; }
+  .cores { display:flex; gap:12px; flex-wrap:wrap; }
+  .cor { width:104px; }
+  .amostra { height:72px; border-radius:6px; border:1px solid #2a2a30; }
+  .nome { font-size:12px; color:#8a8a92; margin-top:6px; }
+  .valor { font-size:12px; font-family:ui-monospace, monospace; }
+  .faixa { margin-top:26px; font-size:14px; }
+  .artista { color:#8a8a92; }
+  .aviso { color:#c9a227; margin-top:20px; }
+</style>
+</head>
+<body>
+  <h1>Paleta da capa</h1>
+  <div class="sub">actualiza sozinha de 3 em 3 segundos</div>
+  <div id="conteudo">a carregar...</div>
+
+<script>
+function cor(nome, c) {
+  if (!c) return "";
+  return '<div class="cor">'
+    + '<div class="amostra" style="background:' + c.hex + '"></div>'
+    + '<div class="nome">' + nome + '</div>'
+    + '<div class="valor">' + c.hex + '</div>'
+    + '<div class="nome">peso ' + (c.peso * 100).toFixed(1) + '%</div>'
+    + '</div>';
+}
+
+async function actualizar() {
+  try {
+    const r = await fetch("/api/paleta", {cache: "no-store"});
+    const d = await r.json();
+    const alvo = document.getElementById("conteudo");
+
+    if (!d.activo || !d.dominante) {
+      alvo.innerHTML = '<div class="aviso">' + (d.motivo || "sem dados") + '</div>';
+      return;
+    }
+
+    let html = '<div class="linha">';
+    html += '<img src="' + d.capa + '" alt="capa">';
+    html += '<div>';
+    html += '<div class="cores">'
+          + cor("dominante", d.dominante)
+          + cor("realce", d.realce)
+          + cor("mais viva", d.mais_viva)
+          + '</div>';
+    html += '<div class="faixa">' + (d.faixa || "")
+          + '<div class="artista">' + (d.artista || "") + '</div></div>';
+    html += '</div></div>';
+
+    html += '<div class="faixa">paleta completa</div><div class="cores">';
+    (d.paleta || []).forEach(function (c, i) { html += cor("#" + (i + 1), c); });
+    html += '</div>';
+
+    alvo.innerHTML = html;
+  } catch (e) {
+    document.getElementById("conteudo").innerHTML =
+      '<div class="aviso">servidor sem resposta</div>';
+  }
+}
+
+actualizar();
+setInterval(actualizar, 3000);
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/paleta")
+def pagina_paleta():
+    # Devolvida tal e qual, sem passar pelo Jinja: é uma página estática
+    # e o CSS e o JavaScript estão cheios de chavetas. Não há nada para
+    # interpolar, e assim não há nada que possa ser mal interpretado.
+    return Response(
+        PAGINA_PALETA,
+        mimetype="text/html",
+    )
+
+
+# ---------------------------------------------------------
 # COMANDOS
 # ---------------------------------------------------------
 
