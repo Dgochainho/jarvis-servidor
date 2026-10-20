@@ -539,6 +539,26 @@ registo que falha não custa a capa à BOX.
 
 **Esperado:** `T32 PASSA`.
 
+### T33 · O tema cumpre as próprias regras
+
+Sem a BOX e sem rede, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_tema.py
+```
+
+Para cada capa do `capas.jsonl` e para nove casos extremos fabricados (preto,
+branco, vermelho puro, o verde da barra de voz…), nas duas variantes, verifica
+que o tema passa os dois contrastes depois de RGB565 ou diz que caiu no
+recurso; que as cores são hex válido; que é determinístico. Verifica também as
+contas de base (branco/preto = 21) e que parâmetros absurdos no URL da `/tema`
+não partem nada.
+
+**Esperado:** `T33 PASSA`.
+
+Não diz se o tema é bonito nem se se lê a 3 m — isso é a página `/tema`, e
+depois a BOX.
+
 ---
 
 ## Registo
@@ -938,3 +958,15 @@ Desenho em `docs/FASE-8.b-tema.md`.
 Não prova que o registo corre em campo: isso vê-se na primeira capa nova com a
 BOX ligada, pela linha `[CAPAS] Nova capa registada (1)` no log do servidor.
 
+## Fase 8.b, passo 2 — 2026-10-20 · cálculo do tema e página `/tema`
+
+| Teste | Resultado | Nota |
+|---|---|---|
+| T33 O tema cumpre as próprias regras | **OK** | 9 extremos + 52 capas, nas duas variantes; nenhum recurso |
+| T31, T32 | **OK** | repetidos neste ramo |
+
+Com os números de partida, os piores contrastes do corpus são texto 12,58,
+botão/fundo 3,00, texto do botão 4,50 e texto premido 4,50 — os botões ficam
+encostados aos mínimos, porque a procura escolhe a luminosidade mais próxima da
+cor da capa que ainda passe. O tema de hoje, medido da mesma maneira: texto
+4,22, botão/fundo 1,72, texto do botão 1,34.

@@ -19,7 +19,8 @@ from flask import (
 # action_service sem import circular. Ver o cabeçalho desse módulo.
 from spotify_session import spotify, SCOPES
 from action_service import executar_para_botao
-from capas_log import registar_capa
+from capas_log import registar_capa, ler_capas
+import pagina_tema
 from cover_service import CoverService
 from mdns_service import MdnsService
 from gemini_live_service import stream_gemini_live_reply
@@ -608,6 +609,26 @@ def pagina_paleta():
     # interpolar, e assim não há nada que possa ser mal interpretado.
     return Response(
         PAGINA_PALETA,
+        mimetype="text/html",
+    )
+
+
+# ---------------------------------------------------------
+# TEMA DO LCD  (Fase 8.b, passo 2)
+# ---------------------------------------------------------
+
+# O LCD simulado para cada capa do capas.jsonl, para se escolherem os
+# números do tema_service a olhar para as capas reais. Ver
+# docs/FASE-8.b-tema.md.
+#
+# Não chama o Spotify: lê o ficheiro, e as imagens vêm do CDN pelo
+# browser. Pode ficar aberta sem pesar no polling da BOX — ao contrário
+# da /paleta, que pede o /api/paleta de poucos em poucos segundos.
+
+@app.route("/tema")
+def pagina_tema_lcd():
+    return Response(
+        pagina_tema.gerar(ler_capas(), request.args),
         mimetype="text/html",
     )
 

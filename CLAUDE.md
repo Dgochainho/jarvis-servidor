@@ -72,6 +72,7 @@ Os que correm sem a BOX ligada:
 python teste_fallback_http.py                          # T20
 .\.venv\Scripts\python.exe teste_accoes_unicas.py      # T31
 .\.venv\Scripts\python.exe teste_registo_capas.py      # T32
+.\.venv\Scripts\python.exe teste_tema.py               # T33
 ```
 
 ---
@@ -88,9 +89,11 @@ A **Fase 2.1** — uma só lista de acções — está fechada (2026-10-20, dese
 `action_service` e em mais lado nenhum** — a não ser a sua linha na descrição
 do `jarvis_live`, que o T31 verifica.
 
-A **8.b** — a capa dá cor ao LCD — está no passo 1, no ramo `fase-8.b-tema`
-(por cima da 2.1): o servidor junta as capas reais em `capas.jsonl`. Ver
-`docs/FASE-8.b-tema.md`; `python capas_log.py` diz quantas há.
+A **8.b** — a capa dá cor ao LCD — está no passo 2, no ramo `fase-8.b-tema`.
+O servidor junta as capas reais em `capas.jsonl` (`python capas_log.py` diz
+quantas há); o `tema_service.py` calcula o tema; a página `/tema` mostra o LCD
+simulado para todas, para se escolherem os números. Ver
+`docs/FASE-8.b-tema.md`.
 
 Fora da lista, por decisão de 2026-10-20: o **sono do PC**, porque o servidor
 vai deixar de viver no portátil.
