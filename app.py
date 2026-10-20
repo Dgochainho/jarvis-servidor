@@ -18,6 +18,7 @@ from flask import (
 # A instância vive no spotify_session para poder ser partilhada com o
 # action_service sem import circular. Ver o cabeçalho desse módulo.
 from spotify_session import spotify, SCOPES
+from action_service import executar_para_botao
 from cover_service import CoverService
 from mdns_service import MdnsService
 from gemini_live_service import stream_gemini_live_reply
@@ -601,68 +602,39 @@ def pagina_paleta():
 # COMANDOS
 # ---------------------------------------------------------
 
-@app.route(
-    "/api/play",
-    methods=["POST"]
-)
-def api_play():
+# Os URLs são contrato com o firmware (display_LCD.c) e com a página web, e
+# por isso ficam como estão. O que cada um faz já não se escreve aqui: vem do
+# COMANDOS_SIMPLES do action_service, a mesma tabela que a voz usa.
+#
+# Até à Fase 2.1 cada rota tinha o método e o endpoint do Spotify escritos
+# à mão, e uma recusa a um botão não deixava rasto no log. Ver
+# docs/FASE-2.1-desenho.md.
+BOTOES = {
+    "play": "resume",
+    "pause": "pause",
+    "next": "next",
+    "previous": "previous",
+}
 
-    data, status_code = (
-        spotify.send_command(
-            "PUT",
-            "/me/player/play"
-        )
+
+def _rota_botao(accao):
+
+    def rota():
+        corpo, status_code = executar_para_botao(accao)
+
+        return jsonify(corpo), status_code
+
+    return rota
+
+
+for _url, _accao in BOTOES.items():
+    app.add_url_rule(
+        f"/api/{_url}",
+        endpoint=f"api_{_url}",
+        view_func=_rota_botao(_accao),
+        methods=["POST"],
     )
 
-    return jsonify(data), status_code
-
-
-@app.route(
-    "/api/pause",
-    methods=["POST"]
-)
-def api_pause():
-
-    data, status_code = (
-        spotify.send_command(
-            "PUT",
-            "/me/player/pause"
-        )
-    )
-
-    return jsonify(data), status_code
-
-
-@app.route(
-    "/api/next",
-    methods=["POST"]
-)
-def api_next():
-
-    data, status_code = (
-        spotify.send_command(
-            "POST",
-            "/me/player/next"
-        )
-    )
-
-    return jsonify(data), status_code
-
-
-@app.route(
-    "/api/previous",
-    methods=["POST"]
-)
-def api_previous():
-
-    data, status_code = (
-        spotify.send_command(
-            "POST",
-            "/me/player/previous"
-        )
-    )
-
-    return jsonify(data), status_code
 
 @app.post("/api/voice")
 def api_voice():

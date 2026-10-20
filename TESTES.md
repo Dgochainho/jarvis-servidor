@@ -502,6 +502,27 @@ garantir que a ligação nova chega com o lugar ainda ocupado.
 o 1012 é a BOX antiga, que está sem corrente e não regista nada. Essa linha só
 aparece se uma BOX *viva* for alguma vez substituída.
 
+### T31 · Uma só lista de acções
+
+Sem a BOX e sem rede, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_accoes_unicas.py
+```
+
+Substitui o `send_command` por um falso e verifica que o enum do Gemini **é** a
+lista do `action_service`; que cada acção tem a sua linha na descrição que o
+Gemini lê; que cada botão (`/api/play`, `/api/pause`, `/api/next`,
+`/api/previous`) chama o mesmo método e endpoint que a voz; e o que o botão
+responde quando o Spotify devolve 204 e 404.
+
+**Esperado:** `T31 PASSA`.
+**Falha se:** qualquer linha `FALHA`. A mais importante é a do 204: antes da
+Fase 2.1 o botão respondia 204 **sem corpo**, e a página web dava o comando por
+falhado depois de ele ter corrido.
+
+Não prova nada sobre a BOX. Para isso continua a haver o T03.
+
 ---
 
 ## Registo
@@ -847,3 +868,26 @@ cliente da BOX e custado os 10 segundos.
 - **Os 95 s de mDNS de 18-10** não foram investigados. Aconteceram contra um
   servidor que tinha passado horas com o event loop bloqueado (o portátil a
   dormir). É hipótese, não conclusão, e é candidato a fase própria.
+
+## Fase 2.1 — 2026-10-20 · uma só lista de acções
+
+Desenho em `docs/FASE-2.1-desenho.md`.
+
+### Resultados
+
+| Teste | Resultado | Nota |
+|---|---|---|
+| T31 Uma só lista de acções | **OK** | 27 verificações, 0 falhas |
+| T03 Botões de transporte | — | **por correr com a BOX** |
+| T07 / T27 Transporte por voz | — | **por correr com a BOX** |
+
+### O que este registo não prova
+
+- **Que a BOX não regrediu.** O T31 simula o Spotify e chama as rotas pela
+  Flask; prova o contrato do lado do servidor, não o firmware. O firmware só lê
+  o código HTTP e esse contrato mantém-se (sucesso passa de 200/204 a sempre
+  200, ambos 2xx), mas fica por ver com o T03.
+- **O defeito do 204 nunca foi observado em campo.** Nos logs desde 30-09 os
+  botões receberam 37 × 200, 2 × 404 e nenhum 204. Foi encontrado pela
+  medição, não por um sintoma.
+

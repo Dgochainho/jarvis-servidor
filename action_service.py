@@ -44,6 +44,12 @@ ESTADO_MAX_IDADE_SEGUNDOS = 15
 # Esta tabela é agora a única lista de acções de transporte do projecto. As
 # outras três — intent_service, local_intent_service e o ramo de texto do
 # /api/voice — foram apagadas em 2026-09-30 por serem inalcançáveis.
+#
+# > **2026-10-20 · Fase 2.1.** Não era a única: os botões (`/api/play` e
+# > companhia, no `app.py`) tinham o método e o endpoint escritos outra vez, e
+# > o `jarvis_live.py` tinha a sua própria lista para o enum do Gemini. Agora
+# > os botões passam por `executar_para_botao` e o enum vem de `ACCOES`. Ver
+# > `docs/FASE-2.1-desenho.md`.
 COMANDOS_SIMPLES = {
     "pause": ("PUT", "/me/player/pause", "Reprodução pausada."),
     "resume": ("PUT", "/me/player/play", "Reprodução retomada."),
@@ -85,6 +91,12 @@ def _registar_recusa(accao, resposta, estado):
 
 
 def _executar_comando_simples(accao):
+    """
+    Devolve (resultado, código HTTP do Spotify).
+
+    A voz só quer o resultado. O código existe para os botões, que o passam à
+    BOX quando o Spotify recusa — ver `executar_para_botao`.
+    """
     metodo, endpoint, mensagem_ok = COMANDOS_SIMPLES[accao]
 
     resposta, estado = spotify.send_command(metodo, endpoint)
@@ -94,7 +106,7 @@ def _executar_comando_simples(accao):
             "ok": True,
             "action": accao,
             "message": mensagem_ok,
-        }
+        }, estado
 
     _registar_recusa(accao, resposta, estado)
 
@@ -110,24 +122,24 @@ def _executar_comando_simples(accao):
             accao,
             "Não há nenhum dispositivo Spotify activo. "
             "Abre o Spotify no telemóvel.",
-        )
+        ), estado
 
     if estado == 403:
         return _erro(
             accao,
             "O Spotify recusou esse comando neste dispositivo.",
-        )
+        ), estado
 
     if estado == 401:
         return _erro(
             accao,
             "A sessão Spotify expirou e não foi possível renová-la.",
-        )
+        ), estado
 
     return _erro(
         accao,
         f"O Spotify respondeu com erro {estado}.",
-    )
+    ), estado
 
 
 def _definir_volume(accao, volume):
@@ -367,6 +379,26 @@ def _estado_actual(accao):
     }
 
 
+# As acções que não cabem no COMANDOS_SIMPLES, porque levam argumentos ou não
+# são um comando ao player.
+_ACCOES_COMPOSTAS = {
+    "current_track": lambda accao, volume, query, tipo: _estado_actual(accao),
+    "set_volume": lambda accao, volume, query, tipo: _definir_volume(
+        accao, volume
+    ),
+    "play_search": lambda accao, volume, query, tipo: _tocar_pesquisa(
+        accao, query, tipo
+    ),
+}
+
+
+# Todas as acções, pela ordem do enum que o Gemini vê.
+#
+# Tirada das duas tabelas de despacho, e não escrita à parte: uma acção nova
+# só existe se alguém a souber executar, e o `jarvis_live` lê daqui (Fase 2.1).
+ACCOES = list(COMANDOS_SIMPLES) + list(_ACCOES_COMPOSTAS)
+
+
 def execute_spotify_action(action, volume=None, query=None, tipo=None):
     """
     Ponto de entrada único, chamado pela ferramenta `spotify_control`.
@@ -376,16 +408,11 @@ def execute_spotify_action(action, volume=None, query=None, tipo=None):
     """
     try:
         if action in COMANDOS_SIMPLES:
-            return _executar_comando_simples(action)
+            resultado, _estado = _executar_comando_simples(action)
+            return resultado
 
-        if action == "current_track":
-            return _estado_actual(action)
-
-        if action == "set_volume":
-            return _definir_volume(action, volume)
-
-        if action == "play_search":
-            return _tocar_pesquisa(action, query, tipo)
+        if action in _ACCOES_COMPOSTAS:
+            return _ACCOES_COMPOSTAS[action](action, volume, query, tipo)
 
         return _erro(action, "Comando não reconhecido.")
 
@@ -396,3 +423,34 @@ def execute_spotify_action(action, volume=None, query=None, tipo=None):
             action,
             "Não consegui falar com o Spotify.",
         )
+
+
+def executar_para_botao(accao):
+    """
+    Ponto de entrada dos botões — os da BOX e os da página web.
+
+    Devolve (corpo, código HTTP). Os dois clientes lêem coisas diferentes, e
+    é por isso que isto não é só o `execute_spotify_action`:
+
+      - a BOX só olha para o código: 2xx é sucesso, o corpo é ignorado;
+      - a página web só olha para o `success` do corpo.
+
+    Sucesso é sempre 200, nunca o código do Spotify. Com 204 a Flask manda a
+    resposta sem corpo, e o `response.json()` da página rebentava depois de o
+    comando ter corrido (medido a 2026-10-20, Flask 3.1.3).
+
+    Uma recusa passa o código do Spotify tal e qual: o `HTTP 404` no log da
+    BOX é a única pista que fica do lado do firmware.
+    """
+    try:
+        resultado, estado = _executar_comando_simples(accao)
+
+    except Exception as erro:
+        print(f"[ACCAO] Falha inesperada em {accao} (botão): {erro}")
+
+        resultado = _erro(accao, "Não consegui falar com o Spotify.")
+        estado = 500
+
+    corpo = {"success": resultado["ok"], **resultado}
+
+    return corpo, (200 if resultado["ok"] else estado)

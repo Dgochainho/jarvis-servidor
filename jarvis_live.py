@@ -19,7 +19,7 @@ import struct
 
 from google.genai import types
 
-from action_service import execute_spotify_action
+from action_service import ACCOES, execute_spotify_action
 
 
 MODEL = "gemini-3.1-flash-live-preview"
@@ -84,15 +84,12 @@ class Pcm24kTo16k:
 # FERRAMENTAS
 # ---------------------------------------------------------------------
 
-SPOTIFY_ACTIONS = [
-    "pause",
-    "resume",
-    "next",
-    "previous",
-    "current_track",
-    "set_volume",
-    "play_search",
-]
+# Vem do action_service desde a Fase 2.1: o enum que o Gemini vê é a lista
+# do que o action_service sabe executar, e não uma cópia que se mantém à mão.
+#
+# A descrição de cada acção, mais abaixo, continua aqui porque é texto de
+# prompt. Quem garante que não fica nenhuma de fora é o T31.
+SPOTIFY_ACTIONS = ACCOES
 
 
 SPOTIFY_CONTROL_DECLARATION = {

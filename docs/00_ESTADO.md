@@ -56,6 +56,10 @@ a tocar, e mudar de faixa três vezes.
 **Critério:** cores reconhecíveis como sendo daquelas capas, e o
 `[PERF] /api/status` com os mesmos tempos de antes.
 
+> **2026-10-20 · feito.** Vista a funcionar nesta máquina, e com commit
+> (`bf045a8`). Ideia seguinte para este ramo, enquanto não há hardware: usar a
+> paleta para dar cor à interface do LCD da BOX.
+
 ### 2. Há dois documentos a discordar sobre a Fase 8
 
 E isto é o mais importante desta nota.
@@ -95,3 +99,11 @@ Por confirmar na prática.
 | D7 | fita ambiente além da matriz? Há orçamento |
 | — | os 95 s de mDNS de 18-10, e o event loop bloqueado horas quando o portátil adormece |
 | — | Fase 2.1: o `action_service` duplica os endpoints do Flask |
+
+> **2026-10-20 · decididas.**
+> - **D7: sim**, fita ambiente além da matriz.
+> - **Os 95 s de mDNS de 18-10:** arquivados. Nunca se repetiram.
+> - **O sono do PC:** arquivado. O objectivo é o servidor deixar de depender
+>   do portátil, e aí o problema desaparece com ele.
+> - **Fase 2.1:** feita no ramo `fase-2.1-accoes-unicas`, falta o T03 com a
+>   BOX. Ver `docs/FASE-2.1-desenho.md`.
