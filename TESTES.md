@@ -601,6 +601,58 @@ Com a BOX ligada e o firmware da 8.b gravado:
 servidor não regista nada por cada tema servido além da linha do
 `GET /api/tema`.
 
+### T36 · `lyrics_service`
+
+Sem rede, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_letras.py
+```
+
+O LRCLIB é simulado e o LRC é **inventado para o teste** — letra real não
+entra no repositório. Verifica a leitura do LRC (tempos repetidos, metadados,
+`[offset:]`), a quebra em filas de 21, as regras do L2, a transliteração do
+L3, os pedidos ao LRCLIB (duração, sufixos, 503 a 1-2-4 s), a cache e a
+expiração do "não há".
+
+**Esperado:** `T36 PASSA`.
+
+### T37 · `visual_service`
+
+Sem a BOX e sem rede externa, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_visual.py
+```
+
+O Spotify, a paleta e o LRCLIB são simulados; o WebSocket é real, numa porta
+livre. Verifica o relógio (âncora a meio do pedido, leitura lenta ignorada),
+os campos das mensagens, o "sem letra" com título e artista, o que um cliente
+recebe ao ligar e numa faixa nova, a recusa de um caminho errado e a falha do
+arranque com a porta ocupada (B5).
+
+**Esperado:** `T37 PASSA`.
+
+### T38 · Letras na matriz virtual, de ouvido ⚠️
+
+Com o servidor reiniciado, `http://localhost:8888/matriz` aberto, e música a
+tocar:
+
+1. Três músicas com letra, de ritmos diferentes.
+2. Uma sem letra (uma das instrumentais do `capas.jsonl`).
+3. Uma pausa, e uma retoma.
+4. Um salto para o meio da música, no telemóvel.
+5. Afinar o offset até a linha mudar com a voz, e anotar o valor.
+
+**Esperado:** a linha muda com a voz, com um erro que não se nota; sem letra,
+o título e o artista; a pausa e o salto corrigem-se em ≤ ~6 s (L5).
+
+**Falha se:** a letra andar sistematicamente adiantada ou atrasada mais do que
+o offset consegue compensar, ou se derivar ao longo da música.
+
+O valor do offset é um resultado: se for longe de zero, a âncora do L4 está a
+falhar por alguma razão que a medição não viu.
+
 ---
 
 ## Registo
@@ -1036,3 +1088,22 @@ registada como facto, não como defeito.
 > **2026-10-20 · o `c5fdf9d` passou a `752ae47`.** O histórico do firmware foi
 > reescrito antes do primeiro push para o GitHub, para tirar a password do
 > Wi-Fi do `wifi.c`. O código é o mesmo; só o identificador mudou.
+
+## Fase 8.d — 2026-10-20 · letras sincronizadas, até à matriz virtual
+
+Desenho em `docs/FASE-8.d-letras.md`. Medição prévia no `diagnostico_letras.py`:
+63% das faixas do corpus com letra sincronizada, 33% sem letra no LRCLIB.
+
+| Teste | Resultado | Nota |
+|---|---|---|
+| T36 `lyrics_service` | **OK** | 31 verificações |
+| T37 `visual_service` | **OK** | 22 verificações, com WebSocket real |
+| T31 a T34 | **OK** | repetidos |
+| T38 Letras de ouvido | — | **por correr: falta reiniciar o servidor** |
+
+O T36 falhou à primeira por um erro **do teste**: a frase escrita para ocupar
+"exactamente três filas" ocupava quatro. E a verificação "três filas, uma
+entrada" tinha passado por acaso, porque a linha foi dividida no tempo e a
+primeira metade tinha três filas. Corrigidas as duas, e a verificação passou a
+exigir que não haja divisão.
+

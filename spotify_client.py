@@ -604,10 +604,18 @@ class SpotifyClient:
 
     def _fetch_status(self):
 
+        # Fase 8.d: quanto demorou a ida ao Spotify. O progress_ms refere-se
+        # a um instante a meio dela, não ao fim, que é quando o
+        # server_time_ms é carimbado; o visual_service precisa das duas
+        # coisas para pôr a letra no sítio. Medir isto não custa nada.
+        pedido_inicio = time.time()
+
         response, error = self._request(
             "GET",
             "/me/player",
         )
+
+        pedido_ms = int((time.time() - pedido_inicio) * 1000)
 
 
         if response is None:
@@ -761,6 +769,16 @@ class SpotifyClient:
                 int(
                     time.time()
                     * 1000
+                ),
+
+            # Fase 8.d — ver o _fetch_status. O track_id é a chave da
+            # cache das letras.
+            "pedido_ms":
+                pedido_ms,
+
+            "track_id":
+                item.get(
+                    "uri"
                 ),
 
         }, 200

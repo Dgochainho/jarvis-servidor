@@ -4,6 +4,7 @@ import wave
 import time
 import math
 import struct
+from pathlib import Path
 
 from flask import (
     Flask,
@@ -26,6 +27,9 @@ from cover_service import CoverService
 from mdns_service import MdnsService
 from gemini_live_service import stream_gemini_live_reply
 from live_voice_ws_server import LiveVoiceWebSocketServer
+from lyrics_service import LyricsService
+from visual_service import VisualService
+from pagina_matriz import PAGINA_MATRIZ
 
 from dotenv import load_dotenv
 
@@ -71,6 +75,16 @@ mdns_service = MdnsService(
 voice_ws_server = LiveVoiceWebSocketServer(
     host="0.0.0.0",
     port=8765,
+)
+
+# Fase 8.d — a camada visual: letras e paleta por push, em :8766/visual.
+# Ver visual_service.py e docs/FASE-8.d-letras.md.
+visual_service = VisualService(
+    spotify,
+    cover_service,
+    LyricsService(),
+    host="0.0.0.0",
+    port=8766,
 )
 
 state_value = None
@@ -634,6 +648,33 @@ def pagina_tema_lcd():
     )
 
 
+# ---------------------------------------------------------
+# MATRIZ VIRTUAL  (Fase 8.d)
+# ---------------------------------------------------------
+
+# A matriz de 128×32 no browser, cliente do visual_service como o nó vai
+# ser. Não chama o Spotify: o que mostra vem todo do :8766/visual.
+
+@app.route("/matriz")
+def pagina_matriz():
+    return Response(
+        PAGINA_MATRIZ,
+        mimetype="text/html",
+    )
+
+
+@app.route("/matriz/fonte.json")
+def fonte_matriz():
+    # A mesma tabela que o lyrics_service usa para saber que caracteres
+    # pode mandar, e que o nó vai levar (Q1).
+    resposta = Response(
+        (Path(__file__).with_name("fontes") / "fonte_5x8.json").read_bytes(),
+        mimetype="application/json",
+    )
+    resposta.headers["Cache-Control"] = "max-age=3600"
+    return resposta
+
+
 # O tema da capa que está a tocar, para a BOX (Fase 8.b, passo 3).
 #
 # A BOX pede-o logo depois da capa, uma vez por cada capa nova. Nesse
@@ -924,6 +965,23 @@ if __name__ == "__main__":
 
             raise SystemExit(1) from erro
 
+        # O mesmo para a camada visual (Fase 8.d): se a 8766 estiver
+        # ocupada, é quase de certeza uma instância antiga, e um arranque
+        # parcial esconderia isso.
+        try:
+            visual_service.start()
+
+        except Exception as erro:
+            print()
+            print("==============================")
+            print("ARRANQUE ABORTADO")
+            print("==============================")
+            print()
+            print(f"O servidor visual não subiu: {erro}")
+            print()
+
+            raise SystemExit(1) from erro
+
         app.run(
             host="0.0.0.0",
             port=8888,
@@ -932,5 +990,6 @@ if __name__ == "__main__":
         )
 
     finally:
+        visual_service.stop()
         voice_ws_server.stop()
         mdns_service.stop()

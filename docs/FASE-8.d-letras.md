@@ -1,6 +1,12 @@
 # Fase 8.d — letras sincronizadas
 
-**2026-10-20** · Documento de desenho, escrito antes do código. Por discutir.
+**2026-10-20** · Documento de desenho, escrito antes do código.
+
+> **2026-10-20 · discutido.** Q1 aprovada: a `5x8` do X11, nos dois lados —
+> descarregada (domínio público, 191 glifos do Latin-1, com `ã` e `õ`) e
+> convertida pelo `fontes/gerar_fonte.py` em `fontes/fonte_5x8.json`. L5
+> aceite tal como está: até ~6 s para uma pausa ou um salto aparecerem na
+> matriz, por agora.
 
 O documento que manda é o PDF de 12-10
 (`camada_visual__hardware_e_integração_12_10_2026_19_13.pdf`, Drive
@@ -196,6 +202,27 @@ tabela. Isso obriga a descarregar o ficheiro BDF da fonte.
 nó; a matriz virtual não tem brilho a sério para afinar.
 
 ---
+
+## O que mudou ao escrever o código
+
+> **2026-10-20 · três ajustes ao desenho, todos para o nó ficar mais burro.**
+>
+> 1. **O relógio não compara relógios.** O PDF fazia o nó calcular `offset =
+>    server_time_ms - progress_ms - latencia/2`, o que só funciona se o
+>    relógio do nó concordar com o do servidor — e um ESP32 acabado de ligar
+>    não sabe as horas. Em vez disso, o `progress_ms` de cada mensagem já vem
+>    **levado até ao instante em que sai**; o nó soma-lhe o tempo que passou
+>    desde que a recebeu, no relógio dele. O `server_time_ms` continua na
+>    mensagem, para diagnóstico.
+> 2. **O "sem letra" (L6) é do servidor.** Em vez de o nó ter um caso
+>    especial, o servidor manda uma entrada única no instante 0 com o título
+>    (até duas filas) e o artista. O nó desenha-a como outra letra qualquer.
+> 3. **O título e o artista da mensagem `track` também são transliterados.**
+>    O nó não os desenha, mas a regra é que nada fora da fonte lhe chega.
+>
+> A matriz virtual foi vista a funcionar numa demonstração com um Spotify
+> simulado: acentos da fonte, filas centradas, o verso seguinte apagado, e a
+> letra a congelar a 20% quando o servidor cai.
 
 ## Como se prova
 

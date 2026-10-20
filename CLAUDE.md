@@ -74,7 +74,12 @@ python teste_fallback_http.py                          # T20
 .\.venv\Scripts\python.exe teste_registo_capas.py      # T32
 .\.venv\Scripts\python.exe teste_tema.py               # T33
 .\.venv\Scripts\python.exe teste_api_tema.py           # T34
+.\.venv\Scripts\python.exe teste_letras.py             # T36
+.\.venv\Scripts\python.exe teste_visual.py             # T37
 ```
+
+E o instrumento da 8.d, que **fala com o LRCLIB** (manda nomes de faixas do
+`capas.jsonl`): `diagnostico_letras.py`. Não guarda nem imprime letras.
 
 ---
 
@@ -97,6 +102,18 @@ uma vez por cada capa nova. O `capas.jsonl` continua a juntar capas, e a página
 `/tema` mostra o LCD simulado para todas — **para comparar regras, não para
 prever a cor exacta: o LCD não mostra as cores como o browser.** O tema neutro
 existe nos dois lados; o T34 compara-os.
+
+A **8.d** — letras sincronizadas — está escrita até à matriz virtual, no ramo
+`fase-8.d-letras` (desenho em `docs/FASE-8.d-letras.md`). O `lyrics_service`
+busca ao LRCLIB e parte em filas de 21; o `visual_service` faz push em
+`:8766/visual` com as mensagens do PDF de 12-10; a página `/matriz` é o nó, no
+browser, até haver hardware. Falta o T38, de ouvido.
+
+| | |
+|---|---|
+| `fontes/fonte_5x8.json` | **a mesma fonte nos três lados** — servidor, matriz virtual, nó. O que não está nela não chega ao nó |
+| `letras_cache/` | fora do git: é texto de terceiros, para uso pessoal. **Letra real nunca entra no repositório**, nem nos testes |
+| porta 8766 | se estiver ocupada, o arranque falha (B5), como a 8765 |
 
 Fora da lista, por decisão de 2026-10-20: o **sono do PC**, porque o servidor
 vai deixar de viver no portátil.

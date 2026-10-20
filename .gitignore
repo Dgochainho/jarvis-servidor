@@ -57,3 +57,6 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Letras do LRCLIB em cache (Fase 8.d): texto de terceiros, para uso pessoal
+letras_cache/
