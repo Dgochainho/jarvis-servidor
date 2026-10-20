@@ -1032,3 +1032,7 @@ pontos do teste passaram. A única ressalva, dita de passagem: **o LCD não é a
 simulação** — as cores no ecrã da BOX diferem das da página `/tema` —, mas o
 resultado no LCD foi julgado "muito bom". Não se mediu a diferença; fica
 registada como facto, não como defeito.
+
+> **2026-10-20 · o `c5fdf9d` passou a `752ae47`.** O histórico do firmware foi
+> reescrito antes do primeiro push para o GitHub, para tirar a password do
+> Wi-Fi do `wifi.c`. O código é o mesmo; só o identificador mudou.

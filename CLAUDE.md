@@ -106,7 +106,9 @@ vai deixar de viver no portátil.
 ## O outro lado
 
 O firmware vive em
-`C:\Users\dgoch\Desktop\ProjetoAss Istant\projetos\hello_world`.
+`C:\Users\dgoch\Desktop\ProjetoAss Istant\projetos\hello_world`, e no GitHub em
+`Dgochainho/jarvis-firmware` (privado, desde 2026-10-20). As credenciais do
+Wi-Fi estão no `main/wifi_credenciais.h`, fora do git.
 
 Os dois lados partilham um contrato de mensagens: **WAKE / START / PCM / END /
 CANCEL** da BOX para o servidor, **READY / PCM / DONE / SLEEP / ERROR** do
