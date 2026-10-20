@@ -78,14 +78,15 @@ python teste_fallback_http.py                          # T20
 
 ## Estado
 
-Fases 0, 1, 2, 3.2, 5 e 7 fechadas. A **Fase 8 — camada visual** está aberta:
+Fases 0, 1, 2, 2.1, 3.2, 5 e 7 fechadas. A **Fase 8 — camada visual** está aberta:
 a 8.a (paleta da capa) está feita e vista a funcionar — `/api/paleta` e a
 página `/paleta`.
 
-A **Fase 2.1** — uma só lista de acções — está escrita no ramo
-`fase-2.1-accoes-unicas` (desenho em `docs/FASE-2.1-desenho.md`). Os botões e a
-voz passam pela mesma tabela do `action_service`; o enum do Gemini vem de
-`ACCOES`. Fecha quando o T03 correr com a BOX.
+A **Fase 2.1** — uma só lista de acções — está fechada (2026-10-20, desenho em
+`docs/FASE-2.1-desenho.md`). Os botões e a voz passam pela mesma tabela do
+`action_service`; o enum do Gemini vem de `ACCOES`. **Uma acção nova entra no
+`action_service` e em mais lado nenhum** — a não ser a sua linha na descrição
+do `jarvis_live`, que o T31 verifica.
 
 A **8.b** — a capa dá cor ao LCD — está no passo 1, no ramo `fase-8.b-tema`
 (por cima da 2.1): o servidor junta as capas reais em `capas.jsonl`. Ver

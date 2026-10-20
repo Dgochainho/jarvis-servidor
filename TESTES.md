@@ -895,7 +895,7 @@ Desenho em `docs/FASE-2.1-desenho.md`.
 |---|---|---|
 | T31 Uma só lista de acções | **OK** | 27 verificações, 0 falhas |
 | T03 Botões de transporte | **OK** | 20-10 17:15: `<<` ×2, `>>` ×3, `pause` → `play`, todos 200; sem recusas `[ACCAO]` |
-| T07 / T27 Transporte por voz | — | **por correr com a BOX** |
+| T07 / T27 Transporte por voz | **OK** | 20-10 17:17: `next`, `pause` e `resume`, todos `-> ok` no registo |
 
 ### O que este registo não prova
 
@@ -906,6 +906,22 @@ Desenho em `docs/FASE-2.1-desenho.md`.
 
   > **2026-10-20 · visto.** O T03 correu com o servidor novo: o `pause`
   > seguido de `play` mostra que a BOX trocou o estado certo duas vezes.
+
+### Observado de passagem, sem correcção
+
+Um caso, por isso só fica registado. O reconhecimento ouviu **"Tchpausa a
+música"** quando foi dito "despausa"; o Gemini chamou `pause` com a música já
+em pausa, e o Spotify respondeu:
+
+```
+[ACCAO] pause recusado com 403: "Player command failed: Restriction violated"
+```
+
+O Jarvis disse "Não consegui pausar a música agora", quando a verdade era "já
+está em pausa". Duas coisas a ver se se repetirem: o 403 de pausar o que já
+está parado merece uma frase própria, e "despausa" pode precisar de um exemplo
+na descrição do `resume`. A linha `[ACCAO]` com o corpo da recusa é o que
+permitiu perceber isto no próprio dia.
 - **O defeito do 204 nunca foi observado em campo.** Nos logs desde 30-09 os
   botões receberam 37 × 200, 2 × 404 e nenhum 204. Foi encontrado pela
   medição, não por um sintoma.
