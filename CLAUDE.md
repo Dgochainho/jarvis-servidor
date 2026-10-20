@@ -107,7 +107,7 @@ A **8.d** — letras sincronizadas — está feita do lado do servidor (2026-10-
 desenho em `docs/FASE-8.d-letras.md`). O `lyrics_service` busca ao LRCLIB e
 parte em filas de 21; o `visual_service` faz push em `:8766/visual` com as
 mensagens do PDF de 12-10; a página `/matriz` é o nó, no browser, até haver
-hardware. O T38 passou de ouvido; falta anotar o valor do offset afinado. O que
+hardware. O T38 passou de ouvido, com o offset a 0: o relógio acerta sozinho. O que
 resta é o nó verdadeiro, quando o Matrix Portal chegar — e herda as regras do
 cabeçalho do `pagina_matriz.py`.
 

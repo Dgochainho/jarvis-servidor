@@ -228,6 +228,11 @@ nó; a matriz virtual não tem brilho a sério para afinar.
 > música verdadeira: "muito bom". Fica a faltar o valor do offset afinado,
 > que é o que diz se a âncora do L4 acerta sozinha. A parte do servidor está
 > feita; o que resta é o nó, quando houver hardware.
+>
+> **Depois · o offset ficou sempre a 0.** A âncora do L4 acerta sozinha: os
+> ~0,45 s que a medição dos logs previa estavam certos, e corrigi-los no meio
+> do pedido chegou. Medido com o browser no PC do servidor; o Wi-Fi do nó
+> acrescenta dezenas de milissegundos, que ficam por ver no hardware.
 
 ## Como se prova
 

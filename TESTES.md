@@ -1099,7 +1099,7 @@ Desenho em `docs/FASE-8.d-letras.md`. Medição prévia no `diagnostico_letras.p
 | T36 `lyrics_service` | **OK** | 31 verificações |
 | T37 `visual_service` | **OK** | 22 verificações, com WebSocket real |
 | T31 a T34 | **OK** | repetidos |
-| T38 Letras de ouvido | **OK** | julgado "muito bom"; o valor do offset não foi registado |
+| T38 Letras de ouvido | **OK** | julgado "muito bom", com o **offset a 0** |
 
 O T36 falhou à primeira por um erro **do teste**: a frase escrita para ocupar
 "exactamente três filas" ocupava quatro. E a verificação "três filas, uma
@@ -1114,3 +1114,9 @@ afinado não foi anotado**, e é ele que diz se a âncora do L4 acerta sozinha:
 perto de zero, acerta; longe, há uma parte do atraso que a medição dos logs não
 viu. Fica para a próxima sessão com música, antes de o nó verdadeiro herdar o
 mesmo relógio.
+
+> **2026-10-20 · anotado: o offset fica sempre a 0.** Não foi preciso mexer-lhe
+> em nenhuma das músicas. A âncora a meio da ida ao Spotify chega sozinha, sem
+> correcção de ouvido — e o nó pode herdar o relógio tal como está. Um aviso:
+> isto foi com o browser no mesmo PC do servidor. No nó a ligação passa pelo
+> Wi-Fi, e esse atraso, de dezenas de milissegundos, não entrou nesta conta.
