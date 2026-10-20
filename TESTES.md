@@ -894,7 +894,7 @@ Desenho em `docs/FASE-2.1-desenho.md`.
 | Teste | Resultado | Nota |
 |---|---|---|
 | T31 Uma só lista de acções | **OK** | 27 verificações, 0 falhas |
-| T03 Botões de transporte | — | **por correr com a BOX** |
+| T03 Botões de transporte | **OK** | 20-10 17:15: `<<` ×2, `>>` ×3, `pause` → `play`, todos 200; sem recusas `[ACCAO]` |
 | T07 / T27 Transporte por voz | — | **por correr com a BOX** |
 
 ### O que este registo não prova
@@ -903,6 +903,9 @@ Desenho em `docs/FASE-2.1-desenho.md`.
   Flask; prova o contrato do lado do servidor, não o firmware. O firmware só lê
   o código HTTP e esse contrato mantém-se (sucesso passa de 200/204 a sempre
   200, ambos 2xx), mas fica por ver com o T03.
+
+  > **2026-10-20 · visto.** O T03 correu com o servidor novo: o `pause`
+  > seguido de `play` mostra que a BOX trocou o estado certo duas vezes.
 - **O defeito do 204 nunca foi observado em campo.** Nos logs desde 30-09 os
   botões receberam 37 × 200, 2 × 404 e nenhum 204. Foi encontrado pela
   medição, não por um sintoma.
