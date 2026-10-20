@@ -127,6 +127,13 @@ mudá-los e ver o efeito nas 51 capas de uma vez.
 | `fundo_c_max` | 0,06 | pouco saturado: a cor é da capa, o fundo só a lembra |
 | `claro_l_min` | 0,88 | (só na `segue`) o fundo claro mínimo |
 
+> **2026-10-20 · escolhidos.** Vistas as 52 capas na `/tema`: variante
+> **`segue`**, porque dá mais variedade; os outros números ficam nos de
+> partida, porque nenhum pareceu mal. Isto contraria a inclinação do passo 1
+> para fundos escuros por causa da barra de voz — vista na página com a barra
+> em `ouve`, não incomodou. Fica por confirmar na BOX, que é onde a escolha se
+> fecha.
+
 ### Como se escolhe
 
 1. A página `/tema` mostra o LCD simulado a 1:1 para cada capa do corpus, com

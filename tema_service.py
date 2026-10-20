@@ -15,8 +15,8 @@ Duas medidas, cada uma para o que serve (decisão T2):
 O contraste mede-se depois de a cor passar a RGB565, porque é isso que o LCD
 mostra.
 
-Nenhum dos números de PARAMETROS está escolhido. São pontos de partida, e a
-página `/tema` existe para os escolher a olhar para as capas reais. Ver
+Os números de PARAMETROS foram escolhidos a 2026-10-20 na página `/tema`,
+a olhar para 52 capas reais. Falta vê-los na BOX. Ver
 `docs/FASE-8.b-tema.md`.
 """
 
@@ -25,7 +25,11 @@ import math
 
 PARAMETROS = {
     # "escuro": fundo sempre escuro. "segue": capa clara dá fundo claro.
-    "variante": "escuro",
+    #
+    # "segue" desde 2026-10-20, escolhida na página /tema com 52 capas: dá
+    # mais variedade. Os outros números ficaram nos de partida — vistos nas
+    # mesmas 52, nenhum pareceu mal. A confirmação final é na BOX (passo 3).
+    "variante": "segue",
 
     # Mínimos de contraste (WCAG). 4,5 é o do texto normal, um pouco acima
     # dos 4,10 de hoje; 3,0 é o dos elementos que não são texto.

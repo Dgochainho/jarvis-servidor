@@ -92,8 +92,8 @@ do `jarvis_live`, que o T31 verifica.
 A **8.b** — a capa dá cor ao LCD — está no passo 2, no ramo `fase-8.b-tema`.
 O servidor junta as capas reais em `capas.jsonl` (`python capas_log.py` diz
 quantas há); o `tema_service.py` calcula o tema; a página `/tema` mostra o LCD
-simulado para todas, para se escolherem os números. Ver
-`docs/FASE-8.b-tema.md`.
+simulado para todas. Escolhido a 2026-10-20: variante `segue`, números de
+partida. Falta o passo 3, o firmware. Ver `docs/FASE-8.b-tema.md`.
 
 Fora da lista, por decisão de 2026-10-20: o **sono do PC**, porque o servidor
 vai deixar de viver no portátil.
