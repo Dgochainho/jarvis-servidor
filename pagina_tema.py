@@ -11,7 +11,8 @@ Pode ficar aberta sem custar nada ao polling da BOX.
 
 O desenho copia o `display_LCD.c` à letra: ecrã de 320×240, barra de voz de
 10 px no topo, capa de 120×120 a 8 px da esquerda, texto de 170 px a 8 px da
-direita, botões de 70, 100 e 70 × 38 a 6 px do fundo. O raio dos botões e a
+direita, linha de estado logo acima dos botões (desde o passo 3), botões de
+70, 100 e 70 × 38 a 6 px do fundo. O raio dos botões e a
 fonte são aproximações — a fonte do LVGL é a Montserrat 14 em bitmap.
 """
 
@@ -86,8 +87,13 @@ a.repor { color: var(--suave); font-size: 13px; }
 }
 .lcd .sem-capa { background: repeating-linear-gradient(45deg, #0002 0 6px, #0000 6px 12px); }
 .lcd .texto {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 8px; top: 60px;
   width: 170px; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 154px; overflow: hidden;
+}
+.lcd .estado {
+  position: absolute; right: 8px; top: 172px; width: 170px; height: 16px;
+  text-align: center; white-space: pre;
 }
 .lcd .btn {
   position: absolute; bottom: 6px; height: 38px; border-radius: 6px;
@@ -140,6 +146,7 @@ def _lcd(tema, capa_url, linhas, barra, premido):
         f'<div class="barra" style="background:{CORES_BARRA[barra]}"></div>'
         f"{imagem}"
         f'<div class="texto" style="color:{tema["texto"]}">{escape(linhas)}</div>'
+        f'<div class="estado" style="color:{tema["texto"]}">PLAYING   1:23 / 3:45</div>'
         f"{botoes}</div></div>"
     )
 
@@ -175,9 +182,27 @@ def _amostras(tema):
 def _linhas(faixa, artista, album):
     return (
         "SPOTIFY\n\n"
-        f"{faixa or ''}\n{artista or ''}\n\n{album or ''}\n\n"
-        "PLAYING   1:23 / 3:45"
+        f"{faixa or ''}\n{artista or ''}\n\n{album or ''}"
     )
+
+
+# A linha de estado tem o seu próprio sítio desde o passo 3 (F6). O texto
+# principal segue a regra do spotify_show_on_lcd: centrado em y = 120
+# enquanto couber, a subir para não passar de y = 168, cortado aos 154 px.
+POSICIONAR_TEXTO = """
+<script>
+// Depois de a Montserrat chegar: a fonte de recurso tem outra altura.
+function posicionar() {
+  document.querySelectorAll('.lcd .texto').forEach(function (t) {
+    var h = Math.min(t.scrollHeight, 154);
+    var centro = Math.min(120, 168 - h / 2);
+    t.style.top = (centro - h / 2) + 'px';
+  });
+}
+posicionar();
+if (document.fonts) document.fonts.ready.then(posicionar);
+</script>
+"""
 
 
 def gerar(capas, argumentos):
@@ -301,5 +326,6 @@ do browser não é o LCD: a escolha final confirma-se na BOX.</p>
 <div class="grelha">
 {"".join(cartoes)}
 </div>
+{POSICIONAR_TEXTO}
 </body>
 </html>"""

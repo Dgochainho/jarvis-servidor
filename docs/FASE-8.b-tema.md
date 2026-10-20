@@ -150,10 +150,80 @@ do corpus e para casos extremos fabricados (preto, branco, cinzento médio,
 vermelho puro, amarelo), o tema passa os dois contrastes depois de RGB565, ou é
 o recurso e diz que é.
 
-## Passo seguinte
+## Passo 3 — a BOX aplica o tema
 
-3. Firmware: pedir o tema na troca de capa e aplicar as cores. Questões já
-   anotadas no passo 1:
+**2026-10-20.** Confirmado na BOX antes de desenhar: o texto dos botões é
+branco e lê-se mal, "mas não impossível de discernir" — bate com os 1,34 : 1.
+E com nomes compridos, o fim do texto fica por baixo dos botões.
+
+### Servidor
+
+**S1 — `/api/tema`, um endpoint próprio.** Não é um campo no `/api/status`
+(regra do `CLAUDE.md`) nem no `/api/paleta` (que é da camada visual e tem outro
+cliente). Devolve as cinco cores e o URL da capa a que dizem respeito:
+
+```json
+{"activo": true, "origem": "capa", "capa": "https://i.scdn.co/…",
+ "fundo": "#…", "texto": "#…", "botao": "#…",
+ "botao_premido": "#…", "texto_botao": "#…"}
+```
+
+Sem reprodução: `activo: false`, `origem: "neutro"`, e o tema neutro. Com o
+estado do Spotify indisponível, ou a paleta a falhar: um erro, e a BOX fica com
+o tema que tem.
+
+**S2 — é barato por construção.** A BOX pede o tema logo depois da capa, e a
+paleta dessa capa já está na cache do `cover_service` (calculada de borla no
+`get_rgb565`); o estado do Spotify vem da cache de 3 s. Nenhum pedido novo ao
+Spotify nem ao CDN no caso normal.
+
+### Firmware
+
+**F1 — quando se pede.** No ciclo de 5 s do `spotify_task`, sempre que a capa
+mostrada não tem ainda o tema dela. Isso cobre a capa nova e também a nova
+tentativa quando o pedido falhou, sem estado extra.
+
+**F2 — só se aplica o tema da capa que está no ecrã.** O `capa` da resposta
+tem de ser igual ao URL da capa mostrada. Se a música mudou entre os dois
+pedidos, o tema fica para o ciclo seguinte. Assim nunca há uma capa com o tema
+de outra.
+
+**F3 — sem reprodução, o tema neutro, sem pedido.** O neutro existe também no
+firmware, como constante, para o arranque e para quando o servidor não
+responde. É uma segunda cópia de uma coisa que tem de concordar — e isso já
+mordeu este projecto —, por isso o T34 lê o `display_LCD.c` e compara.
+
+**F4 — o que muda de cor.** O fundo do ecrã, o texto, o fundo dos três botões
+(normal e premido) e o texto dos botões. **A barra de voz não muda** (T6).
+
+**F5 — o botão premido.** O tema do LVGL sobrepõe-lhe preto a 35/255 e faz o
+botão crescer. Tira-se com `lv_obj_remove_theme(botao, LV_PART_MAIN |
+LV_STATE_PRESSED)`, para o `botao_premido` calculado ser o que se vê. O botão
+deixa de crescer ao toque; a mudança de cor fica como sinal. Corrige-se de
+caminho o `lv_color_hex(999999)`.
+
+**F6 — o texto deixa de ficar por baixo dos botões.** Duas mudanças:
+
+- a linha `PLAYING   1:23 / 3:45` passa para um texto próprio, logo acima dos
+  botões, e nunca é cortada — é a que interessa;
+- o resto (`SPOTIFY`, faixa, artista, álbum) continua centrado ao lado da
+  capa enquanto couber. Quando não cabe, sobe o que for preciso e, se ainda
+  assim não couber, é cortado com reticências no fim — perde-se o fim do nome
+  do álbum, não a hora.
+
+A página `/tema` passa a desenhar assim também.
+
+### Como se prova
+
+- **T34 — `/api/tema`** (sem BOX, sem rede): devolve o tema da capa que está a
+  tocar, o neutro sem reprodução, um erro quando o Spotify falha, e o neutro do
+  firmware é igual ao do servidor.
+- **T35 — na BOX:** mudar de música várias vezes e ver o tema mudar com a capa;
+  pausar até o Spotify deixar de ter reprodução e ver o neutro; um nome
+  comprido não pode tapar a hora; o botão premido muda de cor.
+
+## Questões anotadas no passo 1
+
 
 > **2026-10-20 · passo 2.** As duas primeiras deixaram de ser do passo 3: a
 > barra de voz é a T6 e a variante `escuro` da T4; o contraste mínimo é o

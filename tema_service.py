@@ -351,6 +351,19 @@ def calcular_tema(paleta, p=None):
     }
 
 
+def tema_neutro(p=None):
+    """
+    O tema sem capa: o mesmo cálculo, a partir de um cinzento (T5).
+
+    O firmware tem uma cópia destas cores, para o arranque e para quando o
+    servidor não responde (F3). O T34 compara as duas.
+    """
+    return calcular_tema({"dominante": {"rgb": CINZENTO}}, p)
+
+
+CORES = ("fundo", "texto", "botao", "botao_premido", "texto_botao")
+
+
 # O tema que está hoje no display_LCD.c, para comparar. O texto do botão
 # não está no firmware: é o branco do tema por omissão do LVGL 9.5.
 TEMA_HOJE = {

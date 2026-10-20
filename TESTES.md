@@ -559,6 +559,48 @@ não partem nada.
 Não diz se o tema é bonito nem se se lê a 3 m — isso é a página `/tema`, e
 depois a BOX.
 
+### T34 · `/api/tema`
+
+Sem a BOX e sem rede, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_api_tema.py
+```
+
+Simula o Spotify e a paleta. Verifica que a tocar devolve o tema da capa com o
+URL dela; que sem reprodução, ou sem capa, devolve o neutro e diz que é; que
+com o Spotify indisponível ou a paleta a falhar devolve um erro sem cores; que
+a resposta cabe no buffer da BOX; e que o `TEMA_NEUTRO` do `display_LCD.c` é
+igual ao neutro do servidor — lê o ficheiro do firmware e compara cor a cor.
+
+**Esperado:** `T34 PASSA`. Se o firmware não estiver no sítio do `CLAUDE.md`,
+o ponto 4 diz `NÃO VERIFICADO` em vez de passar.
+
+### T35 · Tema da capa na BOX ⚠️
+
+Com a BOX ligada e o firmware da 8.b gravado:
+
+1. Mudar de música três ou quatro vezes, com capas bem diferentes (uma clara,
+   uma escura, uma garrida).
+2. Pausar até o Spotify deixar de ter reprodução activa.
+3. Pôr a tocar uma faixa com nomes compridos.
+4. Carregar num botão e manter.
+
+**Esperado:**
+
+- o fundo, o texto e os botões mudam com cada capa, em ≤5 s depois dela, e o
+  monitor diz `Tema aplicado: fundo #…`;
+- nunca se vê uma capa com o tema da anterior;
+- sem reprodução, o tema neutro (fundo `#2e2e2e`);
+- o texto dos botões lê-se;
+- a linha `PLAYING   1:23 / 3:45` nunca fica por baixo dos botões;
+- o botão premido muda de cor e deixa de crescer;
+- a barra de voz continua com as cores dela.
+
+**Falha se:** alguma destas não acontecer. O que não se vê no monitor: o
+servidor não regista nada por cada tema servido além da linha do
+`GET /api/tema`.
+
 ---
 
 ## Registo
@@ -970,3 +1012,15 @@ botão/fundo 3,00, texto do botão 4,50 e texto premido 4,50 — os botões fica
 encostados aos mínimos, porque a procura escolhe a luminosidade mais próxima da
 cor da capa que ainda passe. O tema de hoje, medido da mesma maneira: texto
 4,22, botão/fundo 1,72, texto do botão 1,34.
+
+## Fase 8.b, passo 3 — 2026-10-20 · a BOX aplica o tema
+
+| Teste | Resultado | Nota |
+|---|---|---|
+| T34 `/api/tema` | **OK** | 15 verificações; neutro do firmware = do servidor |
+| T31, T32, T33 | **OK** | repetidos |
+| T35 Tema da capa na BOX | — | **por correr: falta gravar o firmware** |
+
+A página `/tema` passou a desenhar o texto como a BOX (F6). Com as 57 capas do
+corpus e a Montserrat carregada: 42 textos centrados, 16 a subir para não
+chegar à linha de estado, nenhum cortado.

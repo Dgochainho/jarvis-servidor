@@ -21,6 +21,7 @@ from spotify_session import spotify, SCOPES
 from action_service import executar_para_botao
 from capas_log import registar_capa, ler_capas
 import pagina_tema
+import tema_service
 from cover_service import CoverService
 from mdns_service import MdnsService
 from gemini_live_service import stream_gemini_live_reply
@@ -631,6 +632,83 @@ def pagina_tema_lcd():
         pagina_tema.gerar(ler_capas(), request.args),
         mimetype="text/html",
     )
+
+
+# O tema da capa que está a tocar, para a BOX (Fase 8.b, passo 3).
+#
+# A BOX pede-o logo depois da capa, uma vez por cada capa nova. Nesse
+# momento a paleta já está na cache do cover_service, calculada de borla
+# pelo get_rgb565, e o estado vem da cache de 3 s: no caso normal isto não
+# faz nenhum pedido ao Spotify nem ao CDN.
+#
+# O `capa` vai na resposta para a BOX só aplicar o tema se for o da capa
+# que tem no ecrã (decisão F2).
+
+@app.route("/api/tema")
+def api_tema():
+
+    status, status_code = (
+        spotify.get_status(
+            max_age_seconds=3.0
+        )
+    )
+
+    if status_code != 200:
+
+        return (
+            jsonify({
+                "motivo": "estado Spotify indisponivel",
+            }),
+            status_code
+        )
+
+    cover_url = (
+        status.get("cover")
+        if status.get("active")
+        else None
+    )
+
+    tema = None
+
+    if cover_url:
+
+        try:
+            paleta = cover_service.get_paleta(cover_url)
+
+        except Exception as error:
+
+            print(
+                "Erro ao extrair paleta para o tema:",
+                error
+            )
+
+            return (
+                jsonify({
+                    "motivo": "falha ao extrair a paleta",
+                }),
+                500
+            )
+
+        if paleta:
+            tema = tema_service.calcular_tema(paleta)
+
+    corpo = {
+        "activo": bool(status.get("active")),
+        "origem": "capa" if tema else "neutro",
+        "capa": cover_url if tema else None,
+    }
+
+    tema = tema or tema_service.tema_neutro()
+
+    corpo.update({
+        cor: tema[cor]
+        for cor in tema_service.CORES
+    })
+
+    resposta = jsonify(corpo)
+    resposta.headers["Cache-Control"] = "no-store"
+
+    return resposta
 
 
 # ---------------------------------------------------------

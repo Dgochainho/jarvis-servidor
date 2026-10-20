@@ -73,6 +73,7 @@ python teste_fallback_http.py                          # T20
 .\.venv\Scripts\python.exe teste_accoes_unicas.py      # T31
 .\.venv\Scripts\python.exe teste_registo_capas.py      # T32
 .\.venv\Scripts\python.exe teste_tema.py               # T33
+.\.venv\Scripts\python.exe teste_api_tema.py           # T34
 ```
 
 ---
@@ -93,7 +94,9 @@ A **8.b** — a capa dá cor ao LCD — está no passo 2, no ramo `fase-8.b-tema
 O servidor junta as capas reais em `capas.jsonl` (`python capas_log.py` diz
 quantas há); o `tema_service.py` calcula o tema; a página `/tema` mostra o LCD
 simulado para todas. Escolhido a 2026-10-20: variante `segue`, números de
-partida. Falta o passo 3, o firmware. Ver `docs/FASE-8.b-tema.md`.
+partida. Passo 3: o `/api/tema` serve o tema à BOX, e o firmware (ramo
+`fase-8.b-tema` do lado de lá) aplica-o; falta o T35 na BOX. Ver
+`docs/FASE-8.b-tema.md`.
 
 Fora da lista, por decisão de 2026-10-20: o **sono do PC**, porque o servidor
 vai deixar de viver no portátil.
