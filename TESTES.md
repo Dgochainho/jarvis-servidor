@@ -1099,7 +1099,7 @@ Desenho em `docs/FASE-8.d-letras.md`. Medição prévia no `diagnostico_letras.p
 | T36 `lyrics_service` | **OK** | 31 verificações |
 | T37 `visual_service` | **OK** | 22 verificações, com WebSocket real |
 | T31 a T34 | **OK** | repetidos |
-| T38 Letras de ouvido | — | **por correr: falta reiniciar o servidor** |
+| T38 Letras de ouvido | **OK** | julgado "muito bom"; o valor do offset não foi registado |
 
 O T36 falhou à primeira por um erro **do teste**: a frase escrita para ocupar
 "exactamente três filas" ocupava quatro. E a verificação "três filas, uma
@@ -1107,3 +1107,10 @@ entrada" tinha passado por acaso, porque a linha foi dividida no tempo e a
 primeira metade tinha três filas. Corrigidas as duas, e a verificação passou a
 exigir que não haja divisão.
 
+### T38 — o que ficou por medir
+
+Passou de ouvido, com o servidor novo e a `/matriz` aberta. **O valor do offset
+afinado não foi anotado**, e é ele que diz se a âncora do L4 acerta sozinha:
+perto de zero, acerta; longe, há uma parte do atraso que a medição dos logs não
+viu. Fica para a próxima sessão com música, antes de o nó verdadeiro herdar o
+mesmo relógio.

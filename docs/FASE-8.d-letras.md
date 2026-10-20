@@ -224,6 +224,11 @@ nó; a matriz virtual não tem brilho a sério para afinar.
 > simulado: acentos da fonte, filas centradas, o verso seguinte apagado, e a
 > letra a congelar a 20% quando o servidor cai.
 
+> **2026-10-20 · T38 passa.** As letras na matriz virtual, de ouvido, com
+> música verdadeira: "muito bom". Fica a faltar o valor do offset afinado,
+> que é o que diz se a âncora do L4 acerta sozinha. A parte do servidor está
+> feita; o que resta é o nó, quando houver hardware.
+
 ## Como se prova
 
 - **T36 — `lyrics_service`** (sem rede): LRC **fabricado** para o teste — nunca
