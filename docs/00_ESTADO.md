@@ -107,3 +107,6 @@ Por confirmar na prática.
 >   do portátil, e aí o problema desaparece com ele.
 > - **Fase 2.1:** feita no ramo `fase-2.1-accoes-unicas`, falta o T03 com a
 >   BOX. Ver `docs/FASE-2.1-desenho.md`.
+>
+> **2026-10-20, mais tarde · Fase 2.1 fechada.** T31, T03 e T07/T27 passam;
+> está no `main`.
