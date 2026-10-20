@@ -110,3 +110,8 @@ Por confirmar na prática.
 >
 > **2026-10-20, mais tarde · Fase 2.1 fechada.** T31, T03 e T07/T27 passam;
 > está no `main`.
+
+> **2026-10-20, fim do dia · 8.b fechada.** A capa dá cor ao LCD: tema
+> calculado no servidor (`/api/tema`), aplicado pela BOX. T31 a T35 passam;
+> está no `main` do servidor e no `master` do firmware. Ver
+> `docs/FASE-8.b-tema.md`.

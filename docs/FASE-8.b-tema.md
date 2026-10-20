@@ -1,6 +1,6 @@
 # Fase 8.b — a capa dá cor ao LCD
 
-**2026-10-20** · Documento de desenho, em construção. Passos 1 e 2.
+**2026-10-20** · Documento de desenho. Passos 1, 2 e 3 — **fase fechada**.
 
 ---
 
@@ -243,3 +243,16 @@ A página `/tema` passa a desenhar assim também.
   (`recolor`) e faz crescer o botão (`LV_THEME_DEFAULT_GROW=y`). O
   `botao_premido` calculado tem de ser visto na BOX com isso por cima, ou o
   firmware tem de tirar esse estilo.
+
+## Fecho
+
+> **2026-10-20 · T35 passa na BOX.** O tema muda com a capa, o neutro aparece
+> sem reprodução, o texto dos botões lê-se, a hora já não fica por baixo dos
+> botões e o premido muda de cor. A variante `segue` e os números de partida
+> ficam confirmados no LCD.
+>
+> O que se aprendeu e não estava previsto: **o LCD não mostra as cores como o
+> browser.** A diferença viu-se a olho e não se mediu. Não incomodou — o
+> resultado foi julgado "muito bom" —, mas quer dizer que a página `/tema`
+> serve para comparar capas entre si e escolher regras, não para prever a cor
+> exacta no ecrã. Se um dia se afinar uma cor concreta, afina-se na BOX.

@@ -1019,8 +1019,16 @@ cor da capa que ainda passe. O tema de hoje, medido da mesma maneira: texto
 |---|---|---|
 | T34 `/api/tema` | **OK** | 15 verificações; neutro do firmware = do servidor |
 | T31, T32, T33 | **OK** | repetidos |
-| T35 Tema da capa na BOX | — | **por correr: falta gravar o firmware** |
+| T35 Tema da capa na BOX | **OK** | tudo visto na BOX: "incrível, perfeito" |
 
 A página `/tema` passou a desenhar o texto como a BOX (F6). Com as 57 capas do
 corpus e a Montserrat carregada: 42 textos centrados, 16 a subir para não
 chegar à linha de estado, nenhum cortado.
+
+### T35 — o que a BOX mostrou
+
+Corrido com o firmware `c5fdf9d` gravado e o servidor reiniciado. Todos os
+pontos do teste passaram. A única ressalva, dita de passagem: **o LCD não é a
+simulação** — as cores no ecrã da BOX diferem das da página `/tema` —, mas o
+resultado no LCD foi julgado "muito bom". Não se mediu a diferença; fica
+registada como facto, não como defeito.

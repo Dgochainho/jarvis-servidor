@@ -80,7 +80,7 @@ python teste_fallback_http.py                          # T20
 
 ## Estado
 
-Fases 0, 1, 2, 2.1, 3.2, 5 e 7 fechadas. A **Fase 8 — camada visual** está aberta:
+Fases 0, 1, 2, 2.1, 3.2, 5, 7 e 8.b fechadas. A **Fase 8 — camada visual** está aberta:
 a 8.a (paleta da capa) está feita e vista a funcionar — `/api/paleta` e a
 página `/paleta`.
 
@@ -90,13 +90,13 @@ A **Fase 2.1** — uma só lista de acções — está fechada (2026-10-20, dese
 `action_service` e em mais lado nenhum** — a não ser a sua linha na descrição
 do `jarvis_live`, que o T31 verifica.
 
-A **8.b** — a capa dá cor ao LCD — está no passo 2, no ramo `fase-8.b-tema`.
-O servidor junta as capas reais em `capas.jsonl` (`python capas_log.py` diz
-quantas há); o `tema_service.py` calcula o tema; a página `/tema` mostra o LCD
-simulado para todas. Escolhido a 2026-10-20: variante `segue`, números de
-partida. Passo 3: o `/api/tema` serve o tema à BOX, e o firmware (ramo
-`fase-8.b-tema` do lado de lá) aplica-o; falta o T35 na BOX. Ver
-`docs/FASE-8.b-tema.md`.
+A **8.b** — a capa dá cor ao LCD — está fechada (2026-10-20, desenho em
+`docs/FASE-8.b-tema.md`). O `tema_service.py` calcula cinco cores a partir da
+paleta, com o contraste garantido; o `/api/tema` serve-as à BOX, que as pede
+uma vez por cada capa nova. O `capas.jsonl` continua a juntar capas, e a página
+`/tema` mostra o LCD simulado para todas — **para comparar regras, não para
+prever a cor exacta: o LCD não mostra as cores como o browser.** O tema neutro
+existe nos dois lados; o T34 compara-os.
 
 Fora da lista, por decisão de 2026-10-20: o **sono do PC**, porque o servidor
 vai deixar de viver no portátil.
