@@ -71,6 +71,7 @@ Os que correm sem a BOX ligada:
 .\.venv\Scripts\python.exe diagnostico_pesquisa.py     # T28
 python teste_fallback_http.py                          # T20
 .\.venv\Scripts\python.exe teste_accoes_unicas.py      # T31
+.\.venv\Scripts\python.exe teste_registo_capas.py      # T32
 ```
 
 ---
@@ -85,6 +86,10 @@ A **Fase 2.1** — uma só lista de acções — está escrita no ramo
 `fase-2.1-accoes-unicas` (desenho em `docs/FASE-2.1-desenho.md`). Os botões e a
 voz passam pela mesma tabela do `action_service`; o enum do Gemini vem de
 `ACCOES`. Fecha quando o T03 correr com a BOX.
+
+A **8.b** — a capa dá cor ao LCD — está no passo 1, no ramo `fase-8.b-tema`
+(por cima da 2.1): o servidor junta as capas reais em `capas.jsonl`. Ver
+`docs/FASE-8.b-tema.md`; `python capas_log.py` diz quantas há.
 
 Fora da lista, por decisão de 2026-10-20: o **sono do PC**, porque o servidor
 vai deixar de viver no portátil.

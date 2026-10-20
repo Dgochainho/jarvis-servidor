@@ -523,6 +523,22 @@ falhado depois de ele ter corrido.
 
 Não prova nada sobre a BOX. Para isso continua a haver o T03.
 
+### T32 · Registo de capas
+
+Sem a BOX e sem rede, na pasta do servidor:
+
+```powershell
+.\.venv\Scripts\python.exe teste_registo_capas.py
+```
+
+Simula o Spotify e a conversão da capa, e escreve num ficheiro temporário — o
+`capas.jsonl` verdadeiro não é tocado. Verifica que uma capa nova fica
+registada com a paleta e os nomes; que a mesma capa não se repete, nem depois
+de um arranque novo; que nunca se regista a paleta da capa anterior; e que um
+registo que falha não custa a capa à BOX.
+
+**Esperado:** `T32 PASSA`.
+
 ---
 
 ## Registo
@@ -890,4 +906,16 @@ Desenho em `docs/FASE-2.1-desenho.md`.
 - **O defeito do 204 nunca foi observado em campo.** Nos logs desde 30-09 os
   botões receberam 37 × 200, 2 × 404 e nenhum 204. Foi encontrado pela
   medição, não por um sintoma.
+
+## Fase 8.b, passo 1 — 2026-10-20 · registo de capas
+
+Desenho em `docs/FASE-8.b-tema.md`.
+
+| Teste | Resultado | Nota |
+|---|---|---|
+| T32 Registo de capas | **OK** | 9 verificações, 0 falhas |
+| T31 Uma só lista de acções | **OK** | repetido neste ramo |
+
+Não prova que o registo corre em campo: isso vê-se na primeira capa nova com a
+BOX ligada, pela linha `[CAPAS] Nova capa registada (1)` no log do servidor.
 

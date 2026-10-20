@@ -19,6 +19,7 @@ from flask import (
 # action_service sem import circular. Ver o cabeçalho desse módulo.
 from spotify_session import spotify, SCOPES
 from action_service import executar_para_botao
+from capas_log import registar_capa
 from cover_service import CoverService
 from mdns_service import MdnsService
 from gemini_live_service import stream_gemini_live_reply
@@ -396,6 +397,19 @@ def api_cover():
         return (
             "Erro ao processar capa.",
             500
+        )
+
+
+    # Fase 8.b, passo 1 — junta as capas reais para se escolherem os
+    # limiares do tema. Depois do [PERF], para não entrar nas medições; e
+    # só com a paleta desta capa, nunca com a da anterior.
+    if cover_service.cached_paleta_url == cover_url:
+        registar_capa(
+            cover_url,
+            status.get("track"),
+            status.get("artist"),
+            status.get("album"),
+            cover_service.cached_paleta,
         )
 
 
