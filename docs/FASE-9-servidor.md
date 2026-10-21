@@ -19,6 +19,20 @@ problema, em vez de ser resolvido.
 características (CPU, memória, disco) e o sistema operativo **estão por
 confirmar** — não se assumem a partir do modelo.
 
+> **2026-10-21 · a cloud foi considerada e posta de parte.** Pensou-se na
+> Cloudflare. Os Workers (incluindo os de Python) não correm este servidor:
+> sem threads, sem código nativo (o Pillow), 128 MB, disco efémero. Os
+> Containers correm a imagem como está, mas têm disco efémero, foram feitos
+> para adormecer, não garantem uma instância sempre ligada, e cobram por tempo
+> activo — e o polling da BOX nunca os deixaria adormecer. Qualquer cloud
+> obrigava ainda a quatro mudanças que uma máquina em casa não pede: a BOX
+> deixava de encontrar o servidor por mDNS e passava a precisar de TLS;
+> todos os endpoints, hoje sem autenticação, ficavam expostos na internet
+> (incluindo o `/api/voice`, que gasta Gemini); o estado precisava de disco
+> persistente; e a latência da voz teria de ser medida de novo. **Decisão:
+> uma máquina sempre ligada em casa — a torre, por agora.** Se um dia a cloud
+> voltar à mesa, um VPS tem muito menos atrito do que a Cloudflare.
+
 ---
 
 ## Passo 1 — o que o servidor exige
@@ -102,6 +116,13 @@ reaproveita-se entre pedidos. Previsão, para ser confirmada ou desmentida:
 os números de Setembro desde a Fase 1.3. Se a previsão 2 se confirmar, o
 número muda — para melhor, mas muda, e as comparações a partir daqui têm de
 saber que houve um degrau. Fica registado no `TESTES.md` com a data.
+
+> **2026-10-21 · aprovado e feito.** O `spotify_client` passa a ter uma
+> `requests.Session`, partilhada pelas threads (o pool do urllib3 é seguro
+> entre threads). Os testes sem rede passam, mas não exercitam o Spotify: a
+> previsão só se confirma no servidor a correr, depois de reiniciado. Não se
+> mediu com um segundo processo ao lado, de propósito: partilharia o ficheiro
+> do token, e uma renovação feita por ele podia deixar o servidor sem sessão.
 
 ---
 

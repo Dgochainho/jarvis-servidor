@@ -92,6 +92,22 @@ class SpotifyClient:
         self._status_cache = None
         self._status_cache_at = 0.0
 
+        # Uma ligação ao api.spotify.com reaproveitada entre pedidos.
+        #
+        # Medido a 2026-10-21 com o py-spy (docs/FASE-9-servidor.md): sem
+        # isto, 98% da CPU do servidor em repouso — 30 a 55% de um núcleo —
+        # ia para o ssl_wrap_socket. Cada requests.request() avulso abria
+        # uma ligação nova, e cada ligação nova voltava a carregar o pacote
+        # inteiro de certificados de confiança, além do TCP e do TLS.
+        #
+        # É a mesma correcção que o cover_service fez a 2026-09-23 para o
+        # CDN das capas; aqui tinha ficado de fora.
+        #
+        # Partilhada pelas threads do Flask, da voz e da camada visual: o
+        # pool de ligações do urllib3 é seguro entre threads, e estes
+        # pedidos não usam cookies.
+        self._session = requests.Session()
+
 
     # -----------------------------------------------------
     # AUTENTICAÇÃO BÁSICA
@@ -404,7 +420,7 @@ class SpotifyClient:
 
         try:
 
-            response = requests.request(
+            response = self._session.request(
                 method,
                 url,
                 headers=headers,
@@ -439,7 +455,7 @@ class SpotifyClient:
 
             try:
 
-                response = requests.request(
+                response = self._session.request(
                     method,
                     url,
                     headers=headers,
