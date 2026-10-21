@@ -1120,3 +1120,35 @@ mesmo relógio.
 > correcção de ouvido — e o nó pode herdar o relógio tal como está. Um aviso:
 > isto foi com o browser no mesmo PC do servidor. No nó a ligação passa pelo
 > Wi-Fi, e esse atraso, de dezenas de milissegundos, não entrou nesta conta.
+
+## Fase 9 — 2026-10-21 · `Session` no `spotify_client` ⚠️ degrau nas baselines
+
+Desenho em `docs/FASE-9-servidor.md`. O `py-spy` mostrou que 98% da CPU em
+repouso ia para abrir ligações TLS novas ao Spotify, uma por pedido.
+
+| | Antes | Depois |
+|---|---|---|
+| CPU em repouso, 60 s | 33,3% de um núcleo | **2,4%** |
+| ida ao Spotify, mediana | 1,27 s | **0,16 s** |
+| p10 / p90 | 0,94 / 1,63 s | 0,10 / 0,22 s |
+| ligações HTTPS abertas | 0 — uma nova por pedido | 2 a 3, reaproveitadas |
+| memória | 84 MB | 82 MB |
+
+"Antes": a execução de 2026-10-21 até às 18:39, 716 pedidos do `/api/status`.
+"Depois": 30 pedidos a 1,5 s de intervalo, lidos do campo `pedido_ms`.
+
+**A partir de hoje, o `[PERF] /api/status` não é comparável com Setembro.**
+Qualquer comparação com as baselines 1 a 5 tem de saber que houve este degrau.
+
+**E o instrumento tinha um corte que não estava escrito em lado nenhum:** a
+linha `[PERF] /api/status` só se escreve **acima de 0,5 s**. Até hoje isso
+não pesava — os 716 pedidos de antes passaram todos o corte. Depois da
+`Session`, 145 de 149 ficaram abaixo e não deixaram rasto: o `[PERF]` passou a
+contar só os lentos. Os números do "depois" vêm por isso do `pedido_ms`, que
+não tem corte.
+
+A distribuição de 30 791 idas usada no desenho da 8.d (mediana 0,90 s, mínimo
+exactamente 0,50 s) era, portanto, **só a dos pedidos lentos**. A âncora do L4
+não depende dela — usa o `pedido_ms` de cada leitura —, e por isso adapta-se
+sozinha aos tempos novos: o T38 com o offset a 0 continua válido.
+

@@ -47,7 +47,9 @@ Sete fases fechadas assim. É para manter.
 
 | | |
 |---|---|
-| `/api/status` | está no ciclo de polling da BOX, de 5 em 5 s, e tem medição `[PERF]` desde a Fase 1.3, comparável com as baselines de Setembro. **Não lhe acrescentes trabalho.** |
+| `/api/status` | está no ciclo de polling da BOX, de 5 em 5 s, e tem medição `[PERF]` desde a Fase 1.3. **Não lhe acrescentes trabalho.** Desde 2026-10-21 (`Session` no `spotify_client`) há um **degrau**: 1,27 s → 0,16 s de mediana, e não se compara com Setembro sem o saber |
+| `[PERF] /api/status` | **só escreve acima de 0,5 s.** Com a `Session` quase nenhum pedido lá chega: conta os lentos, não a distribuição. Para a distribuição, o `pedido_ms` que o próprio `/api/status` devolve |
+| ligações ao Spotify | **sempre pela `Session`** do `spotify_client`. Um `requests.request()` avulso abre TLS de raiz e recarrega os certificados: era 98% da CPU em repouso |
 | `send_command` | aceita **2xx**, não só 204. O Spotify devolve 200 em endpoints que a documentação promete 204, e tratar isso como recusa fez o Jarvis pedir desculpa por coisas que tinha feito |
 | `MERCADO = "PT"` | escrito à mão de propósito. O `market=from_token` manda o Spotify ver o país da conta, exige o scope `user-read-private` e devolve 403 |
 | pesquisa do Spotify | **nunca devolve vazio.** Pedir uma música que não existe põe a tocar a mais parecida, com toda a convicção. Medido com sete strings aleatórias nos quatro tipos |

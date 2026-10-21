@@ -123,6 +123,17 @@ saber que houve um degrau. Fica registado no `TESTES.md` com a data.
 > previsão só se confirma no servidor a correr, depois de reiniciado. Não se
 > mediu com um segundo processo ao lado, de propósito: partilharia o ficheiro
 > do token, e uma renovação feita por ele podia deixar o servidor sem sessão.
+>
+> **2026-10-21 · as duas previsões confirmam-se.** CPU em repouso de 33,3%
+> para **2,4%** de um núcleo; ida ao Spotify de 1,27 s para **0,16 s** de
+> mediana (p90 de 1,63 s para 0,22 s). As ligações HTTPS passam a ficar
+> abertas e a ser reaproveitadas. Números completos no `TESTES.md`.
+>
+> De caminho, uma coisa que não se sabia: o `[PERF] /api/status` só escreve
+> acima de 0,5 s. Com a `Session`, quase nenhum pedido lá chega, e o `[PERF]`
+> passou a contar só os lentos. A distribuição usada na 8.d também era só a
+> dos lentos — sem efeito na âncora do relógio, que usa o `pedido_ms` de
+> cada leitura.
 
 ---
 
