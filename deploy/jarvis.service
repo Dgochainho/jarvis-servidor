@@ -1,0 +1,43 @@
+# O servidor do Jarvis como serviço do systemd (Fase 9, decisão M1).
+#
+# Instalar (ver deploy/INSTALAR.md):
+#
+#   sudo cp deploy/jarvis.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jarvis
+#
+# O caminho e o utilizador abaixo assumem a instalação do INSTALAR.md: um
+# utilizador `jarvis` e o repositório em /home/jarvis/jarvis-servidor. Se for
+# outro sítio, mudar as duas linhas.
+
+[Unit]
+Description=Jarvis — servidor da ESP32-S3-BOX-3 (Spotify, voz, camada visual)
+
+# A rede tem de estar de pé: o zeroconf anuncia o serviço na interface que
+# encontrar, e o servidor fala com o Spotify e o Gemini logo no arranque.
+Wants=network-online.target
+After=network-online.target
+
+# Se o servidor cair mais de 5 vezes em 5 minutos, o systemd desiste em vez de
+# o reiniciar em ciclo: um arranque que falha sempre (porta ocupada, .env em
+# falta) é para ler no log, não para repetir.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/jarvis-servidor
+ExecStart=/home/jarvis/jarvis-servidor/deploy/arrancar.sh
+
+# Volta sozinho se cair. Não reinicia se for parado de propósito
+# (systemctl stop), nem se sair com sucesso.
+Restart=on-failure
+RestartSec=5
+
+# O servidor fecha as ligações no `finally` do app.py; dar-lhe tempo para isso.
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -653,6 +653,26 @@ o offset consegue compensar, ou se derivar ao longo da música.
 O valor do offset é um resultado: se for longe de zero, a âncora do L4 está a
 falhar por alguma razão que a medição não viu.
 
+### T39 · O servidor volta sozinho ⚠️
+
+Na torre, com o serviço `jarvis` instalado (Fase 9):
+
+1. Matar o processo do servidor: `sudo pkill -f "python -u app.py"`.
+2. Esperar 10 s e ver `systemctl status jarvis`.
+3. Desligar a torre **da corrente** (não pelo botão), esperar 10 s, voltar a
+   ligar a corrente, e não tocar em mais nada.
+
+**Esperado:**
+
+- em 1-2, o serviço volta a `active (running)` em ~5 s, com um
+  `log-servidor-<data>.txt` novo guardado e um `log-servidor.txt` a começar;
+- em 3, a torre liga sozinha (a opção da BIOS), o serviço arranca, e a BOX
+  reencontra-o por mDNS e volta a mostrar a música — sem ninguém tocar em
+  nada nem na torre nem na BOX.
+
+**Falha se:** alguma destas precisar de uma mão humana. É esse o ponto da
+Fase 9: o Jarvis deixar de depender de alguém se lembrar de o arrancar.
+
 ---
 
 ## Registo

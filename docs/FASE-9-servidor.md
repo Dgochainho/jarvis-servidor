@@ -211,7 +211,7 @@ desenvolvimento.
 |---|---|---|
 | `.env` | sim | à mão (pen ou `scp`), **nunca pelo git** |
 | `.spotify_token.json` | sim | à mão; com ele não é preciso voltar a fazer login |
-| `capas.jsonl` | **a confirmar** | é o corpus da 8.b, não um registo de conversas |
+| `capas.jsonl` | sim | o corpus da 8.b; decidido a 2026-10-21 — *"vai ser importante mais tarde"* |
 | `letras_cache/` | sim | poupa pedidos ao LRCLIB; se faltar, refaz-se sozinha |
 | `turnos.jsonl` | **não** | decidido |
 | `log-servidor*.txt` | não | ficam no portátil, com a história até hoje |
@@ -257,9 +257,13 @@ Na torre, por esta ordem:
 
 ## Passos seguintes
 
-4. Escrever o serviço e o guia de instalação (`deploy/`), quando este desenho
-   estiver discutido.
-5. A mudança, quando a torre estiver pronta.
+4. ~~Escrever o serviço e o guia de instalação~~ — feito a 2026-10-21, em
+   `deploy/`: `jarvis.service`, `arrancar.sh` (o equivalente do `.ps1`),
+   `actualizar.sh` (git pull, testes, e só então restart) e `INSTALAR.md`,
+   passo a passo. O `.gitattributes` garante LF nos scripts. Não foi corrido
+   em Linux nenhum: só a sintaxe dos scripts foi verificada.
+5. A mudança, quando a torre estiver pronta — com as características dela
+   registadas aqui.
 
 Depois da mudança, actualizar o que deixa de ser verdade: a secção *Arrancar*
 do `CLAUDE.md` (passa a ser o serviço, não o `.ps1`), o aviso da consola que

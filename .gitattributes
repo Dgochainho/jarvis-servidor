@@ -16,3 +16,9 @@
 
 # Scripts de PowerShell: manter CRLF, que é o que o Windows espera.
 *.ps1   text eol=crlf
+
+# Os scripts e o serviço da torre (Fase 9) correm em Linux: fins de linha LF,
+# sempre, mesmo quando o repositório é aberto no portátil com Windows. Um \r
+# no fim do "#!/bin/sh" dá "not found" sem mais explicação.
+*.sh       text eol=lf
+*.service  text eol=lf
