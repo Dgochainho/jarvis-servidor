@@ -170,10 +170,98 @@ record` numa conversa.
 de KB/s. A torre sobra; um Raspberry Pi também chegaria, se um dia a torre der
 lugar a uma coisa mais pequena.
 
-## Passos seguintes (por escrever)
+## Passo 3 — o desenho da mudança
 
-3. O desenho da mudança: sistema operativo da torre, o servidor como serviço
-   do sistema (arranque e reinício sozinho, log para ficheiro — o problema da
-   consola que bloqueia desaparece), a passagem do token e do `.env`, o que
-   fazer ao `turnos.jsonl`.
-4. A mudança, com o T01 e o T02 no destino.
+**2026-10-21.** Decidido: a torre leva **Linux** (vem com Windows). As
+características ficam para quando estiver pronta. O `turnos.jsonl` **não vai**:
+a torre começa com um registo novo, só com o que for dito depois da mudança.
+
+### M1 — o servidor como serviço do sistema
+
+Um serviço do `systemd`, em vez do `iniciar-servidor.ps1`:
+
+- arranca com a máquina e **reinicia sozinho** se cair (`Restart=on-failure`,
+  com 5 s de intervalo);
+- corre com um utilizador próprio, sem privilégios de administrador;
+- escreve no mesmo `log-servidor.txt` de sempre, e roda o anterior para
+  `log-servidor-<data>.txt` a cada arranque, como o `.ps1` faz hoje — os
+  hábitos de análise (e os `grep` deste projecto) continuam a servir.
+
+**O problema da consola desaparece, em vez de ser contornado.** O aviso do
+`CLAUDE.md` (*"nunca corras `python app.py` com a saída no terminal"*) existe
+porque a consola do Windows bloqueia o processo. Um serviço não tem consola.
+
+O `iniciar-servidor.ps1` fica, para quem correr o servidor no portátil em
+desenvolvimento.
+
+### M2 — instalação
+
+- **Distribuição:** uma com suporte longo e Python 3.12 ou mais recente —
+  Ubuntu Server 24.04 LTS ou Debian 13. O servidor foi sempre corrido em 3.12;
+  com outra versão, os testes T31–T37 dizem se alguma coisa mudou.
+- **Código:** `git clone` do `jarvis-servidor`, ramo `main`. Actualizar passa
+  a ser `git pull` e reiniciar o serviço.
+- **Dependências:** `requirements-lock.txt` num venv.
+- **Ligação por cabo**, se der. A voz são 32 KB/s em cada sentido e não gosta
+  de cortes; o Wi-Fi da BOX já é a parte frágil, não vale a pena juntar outra.
+
+### M3 — o que passa do portátil para a torre
+
+| | vai? | como |
+|---|---|---|
+| `.env` | sim | à mão (pen ou `scp`), **nunca pelo git** |
+| `.spotify_token.json` | sim | à mão; com ele não é preciso voltar a fazer login |
+| `capas.jsonl` | **a confirmar** | é o corpus da 8.b, não um registo de conversas |
+| `letras_cache/` | sim | poupa pedidos ao LRCLIB; se faltar, refaz-se sozinha |
+| `turnos.jsonl` | **não** | decidido |
+| `log-servidor*.txt` | não | ficam no portátil, com a história até hoje |
+
+Se o token alguma vez não servir na torre, o login do Spotify volta para o
+`/callback` do `SPOTIFY_REDIRECT_URI`, que hoje aponta para o portátil — fica
+anotado, não se resolve antes de ser preciso.
+
+### M4 — o portátil tem de deixar de ser servidor
+
+**Dois servidores a anunciar `spotify-service.local` na mesma rede é o B5 outra
+vez** — a BOX pode ir ter com o errado, e nada o diz. Antes de a torre arrancar
+o serviço pela primeira vez, o servidor do portátil pára e não volta a ser
+arrancado. O nome da torre na rede **não** pode ser `spotify-service`: esse é
+o do serviço, que o `zeroconf` anuncia, e o Linux anuncia o da máquina à parte.
+
+### M5 — a torre não pode adormecer nem ficar desligada
+
+- Suspensão e hibernação desligadas no sistema (num Linux de servidor já vêm
+  assim; num de secretária, não).
+- Na BIOS, ligar sozinha quando volta a corrente, para uma falha de luz não
+  deixar o Jarvis em baixo até alguém carregar no botão.
+
+### M6 — rede
+
+As portas 8888, 8765 e 8766 em TCP, e a 5353 em UDP para o mDNS, abertas **só
+para a rede local** na firewall da torre. Nada é aberto no router: o servidor
+continua invisível de fora, que é o que permite os endpoints não terem
+autenticação.
+
+### Como se prova
+
+Na torre, por esta ordem:
+
+1. **T31–T37** sem a BOX (o T34 vai dizer `NÃO VERIFICADO` no ponto do
+   firmware, porque o caminho é de Windows — é o comportamento previsto).
+2. **T01** arranque limpo e **T02** a BOX encontra o serviço — os dois que
+   esta mudança pode partir.
+3. **T03** botões, **T07** voz, **T38** a matriz.
+4. **T39, novo — o servidor volta sozinho:** matar o processo e ver o
+   `systemd` reiniciá-lo; desligar a torre da corrente e ver tudo voltar,
+   com a BOX a reencontrá-la sem ninguém tocar em nada.
+
+## Passos seguintes
+
+4. Escrever o serviço e o guia de instalação (`deploy/`), quando este desenho
+   estiver discutido.
+5. A mudança, quando a torre estiver pronta.
+
+Depois da mudança, actualizar o que deixa de ser verdade: a secção *Arrancar*
+do `CLAUDE.md` (passa a ser o serviço, não o `.ps1`), o aviso da consola que
+bloqueia (deixa de se aplicar na torre), e *O outro lado* no `CLAUDE.md` do
+firmware, que diz onde vive o servidor.
