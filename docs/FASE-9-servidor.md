@@ -137,9 +137,41 @@ saber que houve um degrau. Fica registado no `TESTES.md` com a data.
 
 ---
 
+## Passo 2 — uma conversa de voz
+
+**2026-10-21.** Já com a `Session`. Uma amostra por segundo durante 5 minutos
+sobre o processo do servidor: 3 minutos de repouso, depois uma conversa de 5
+turnos (19:00:37 a 19:01:56, no `turnos.jsonl`). A página `/paleta` estava
+aberta nos dois períodos.
+
+| | repouso | conversa |
+|---|---|---|
+| CPU, média | 0,5% de um núcleo | 4,6% |
+| CPU, p95 | 2,2% | 13,5% |
+| CPU, máximo | 4,5% | **92,5%** — um pico isolado, ver abaixo |
+| memória | 69–82 MB | 69–81 MB |
+| E/S, média | 0,5 KB/s | 41,5 KB/s |
+| E/S, máximo | 2,7 KB/s | 555 KB/s |
+
+A E/S é a contagem do Windows por processo, que soma rede e disco — uma
+aproximação, não um medidor de rede. A média da conversa bate com o que a voz
+deve custar: 16 kHz × 16 bits são 32 KB/s em cada sentido, enquanto se fala ou
+se ouve.
+
+**O pico.** Cerca de 3 s acima dos 30%, com 92,5% no segundo mais alto, logo no
+início do 3.º turno — cerca de 1,7 s de CPU ao todo. O log não tem hora em cada
+linha, e por isso não se consegue atribuir ao certo; o candidato é o
+processamento da resposta do Gemini. Isolado, e sem efeito na voz (o turno
+correu normal). **Fica em aberto**: se interessar, apanha-se com o `py-spy
+record` numa conversa.
+
+**O que isto diz sobre a máquina:** quase nada a exige. Memória abaixo dos
+100 MB, CPU média abaixo de 5% de um núcleo a falar, rede na ordem das dezenas
+de KB/s. A torre sobra; um Raspberry Pi também chegaria, se um dia a torre der
+lugar a uma coisa mais pequena.
+
 ## Passos seguintes (por escrever)
 
-2. Medir uma conversa de voz: pico de CPU, rede, memória.
 3. O desenho da mudança: sistema operativo da torre, o servidor como serviço
    do sistema (arranque e reinício sozinho, log para ficheiro — o problema da
    consola que bloqueia desaparece), a passagem do token e do `.env`, o que
