@@ -35,6 +35,16 @@ confirmar** — não se assumem a partir do modelo.
 
 ---
 
+> **2026-10-21/22 · Android e Chromebook ponderados; fica a torre.** Com a
+> torre em dúvida, pensou-se num telemóvel Android (Termux) e num Chromebook
+> (Lenovo IdeaPad Duet 3). O Android: a instalação do `pydantic-core` é
+> incerta, o sistema mata processos longos, e descarta o mDNS com o ecrã
+> apagado. O Chromebook resolve os dois primeiros, mas o Linux dele corre atrás
+> de uma NAT — o servidor anunciaria um IP interno que a BOX não alcança. Os
+> dois precisavam de a BOX saber usar um IP fixo quando o mDNS falha, uma
+> alteração ao firmware que fica anotada como útil para qualquer destino que
+> não seja um Linux normal na rede. **Volta-se à torre.**
+
 ## Passo 1 — o que o servidor exige
 
 ### Código e dependências

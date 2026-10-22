@@ -34,6 +34,7 @@ git clone https://github.com/Dgochainho/jarvis-servidor.git
 cd jarvis-servidor
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-lock.txt
+exit                                   # volta ao utilizador de administração
 ```
 
 O repositório é privado: o `git clone` pede autenticação. A forma mais simples
@@ -41,31 +42,81 @@ O repositório é privado: o `git clone` pede autenticação. A forma mais simpl
 
 ## 3. Os segredos e os dados (M3)
 
-**No portátil**, numa PowerShell na pasta do servidor, depois de saber o IP da
-torre (`hostname -I` na torre):
-
-```powershell
-scp .env .spotify_token.json capas.jsonl jarvis@IP-DA-TORRE:~/jarvis-servidor/
-scp -r letras_cache jarvis@IP-DA-TORRE:~/jarvis-servidor/
-```
-
+Vão: `.env`, `.spotify_token.json`, `capas.jsonl` e a pasta `letras_cache`.
 **Não** vão: o `turnos.jsonl` (decidido — a torre começa um registo novo) nem
 os `log-servidor*.txt`. O `.env` e o token **nunca passam pelo git**.
 
-Na torre, só o utilizador `jarvis` os lê:
+**Primeiro, parar o servidor do portátil** (a janela do `iniciar-servidor.ps1`,
+com `Ctrl+C`) e não o voltar a arrancar. O servidor renova o token do Spotify
+sozinho; se renovar depois da cópia, a cópia fica para trás. É também o passo 7
+— aqui só se antecipa.
+
+### Por um disco externo (o caminho previsto)
+
+**No portátil**, com o disco ligado — trocar `E:` pela letra que o Windows lhe
+der —, numa PowerShell na pasta do servidor:
+
+```powershell
+New-Item -ItemType Directory -Force E:\jarvis-transferencia
+Copy-Item .env, .spotify_token.json, capas.jsonl E:\jarvis-transferencia
+Copy-Item -Recurse letras_cache E:\jarvis-transferencia
+```
+
+**Na torre**, com o disco ligado. Num Ubuntu **Desktop** ele monta-se sozinho
+em `/media/<utilizador>/<nome-do-disco>`; num **Server** monta-se à mão:
 
 ```bash
-chmod 600 ~/jarvis-servidor/.env ~/jarvis-servidor/.spotify_token.json
+lsblk -f                                  # encontrar o disco: sdb1, ou parecido
+sudo mkdir -p /mnt/disco
+sudo mount /dev/sdb1 /mnt/disco           # NTFS e exFAT lêem-se sem instalar nada
+```
+
+Copiar para o repositório, e passar os ficheiros para o `jarvis` (trocar
+`/mnt/disco` pelo `/media/…` no Desktop):
+
+```bash
+cd /mnt/disco/jarvis-transferencia
+sudo cp .env .spotify_token.json capas.jsonl /home/jarvis/jarvis-servidor/
+sudo cp -r letras_cache /home/jarvis/jarvis-servidor/
+sudo chown -R jarvis:jarvis /home/jarvis/jarvis-servidor
+sudo chmod 600 /home/jarvis/jarvis-servidor/.env /home/jarvis/jarvis-servidor/.spotify_token.json
+cd / && sudo umount /mnt/disco            # só no Server
+```
+
+**Depois de o servidor arrancar bem na torre** (passo 8), apagar a pasta
+`jarvis-transferencia` do disco: tem o `.env` e o token em claro.
+
+### Pela rede, em alternativa
+
+O `jarvis` não aceita login (não tem password, de propósito), por isso o `scp`
+vai para o utilizador de administração e depois passa-se ao `jarvis`. **No
+portátil**:
+
+```powershell
+scp .env .spotify_token.json capas.jsonl ADMIN@IP-DA-TORRE:~/
+scp -r letras_cache ADMIN@IP-DA-TORRE:~/
+```
+
+e **na torre**, com o utilizador de administração:
+
+```bash
+sudo mv ~/.env ~/.spotify_token.json ~/capas.jsonl ~/letras_cache /home/jarvis/jarvis-servidor/
+sudo chown -R jarvis:jarvis /home/jarvis/jarvis-servidor
+sudo chmod 600 /home/jarvis/jarvis-servidor/.env /home/jarvis/jarvis-servidor/.spotify_token.json
 ```
 
 ## 4. Os testes sem rede, antes de mais nada
 
+Como o utilizador `jarvis`, que é o que o serviço vai usar:
+
 ```bash
+sudo -iu jarvis
 cd ~/jarvis-servidor
 for t in teste_accoes_unicas.py teste_registo_capas.py teste_tema.py \
          teste_api_tema.py teste_letras.py teste_visual.py; do
     .venv/bin/python "$t" | tail -1
 done
+exit
 ```
 
 **Esperado:** T31, T32, T33, T34, T36 e T37 a dizer `PASSA`. No T34, o ponto 4
@@ -94,15 +145,16 @@ Nada se abre no router.
 
 ## 7. O portátil deixa de ser servidor (M4)
 
-**No portátil**: fechar o servidor (a janela do `iniciar-servidor.ps1`, com
-`Ctrl+C`) e não o voltar a arrancar. Dois servidores a anunciar
+**Confirmar** que o servidor do portátil continua parado desde o passo 3, e
+que ninguém o voltou a arrancar. Dois servidores a anunciar
 `spotify-service.local` na mesma rede, e a BOX pode ir ter com o errado sem
 que nada o diga.
 
 ## 8. O serviço (M1)
 
+Com o utilizador de administração:
+
 ```bash
-exit                                   # volta ao utilizador com sudo
 sudo cp /home/jarvis/jarvis-servidor/deploy/jarvis.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now jarvis
