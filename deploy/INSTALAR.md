@@ -3,19 +3,89 @@
 Fase 9 · guia passo a passo. O porquê de cada passo está no
 `docs/FASE-9-servidor.md` (decisões M1 a M6); aqui só o que se faz.
 
-Assume Ubuntu Server 24.04 LTS ou Debian 13 já instalado, com acesso por SSH
-ou teclado, e um utilizador com `sudo`. Os comandos são para correr na torre,
+Começa com a torre ainda em Windows. Os comandos são para correr na torre,
 excepto onde diz **no portátil**.
+
+---
+
+## A. Instalar o Linux
+
+**Ubuntu Server 24.04 LTS**, e não a versão mais recente: traz o Python 3.12,
+que é aquele em que o servidor sempre correu, e tem suporte até 2029. "Server"
+quer dizer sem ambiente gráfico — a torre fica ligada à rede e usa-se a partir
+do portátil, por SSH.
+
+⚠️ **Isto apaga o Windows e tudo o que estiver no disco da torre.** Copiar
+antes o que lá houver para guardar.
+
+### A1. No portátil: preparar uma pen de instalação
+
+Precisa de uma pen de **8 GB ou mais, que vai ser apagada**. O disco externo
+de 500 GB também serviria, mas ficava apagado por inteiro — não usar se tiver
+alguma coisa.
+
+1. Descarregar o Ubuntu Server 24.04 LTS (um ficheiro `.iso`, ~3 GB) de
+   `ubuntu.com/download/server`.
+2. Descarregar o **Rufus** de `rufus.ie` — corre sem instalar.
+3. No Rufus: *Dispositivo* → a pen; *Seleccionar* → o `.iso`; o resto como
+   vem; *Iniciar*. Se perguntar o modo, **ISO**.
+
+### A2. Na torre: arrancar pela pen
+
+1. Com a torre desligada, ligar a pen e um teclado, monitor e cabo de rede.
+2. Ligar a torre e carregar várias vezes em **Esc** logo no arranque — nos HP
+   abre o menu de arranque. Depois:
+   - **F10** entra na BIOS. Aproveitar para pôr *After Power Loss* (ou *AC
+     Power Recovery*) em **Power On** (M5). Guardar e sair.
+   - **F9** escolhe o dispositivo de arranque: a pen (USB).
+3. O *Secure Boot* pode ficar ligado — o Ubuntu arranca com ele.
+
+### A3. O instalador
+
+Escolhas, por ordem de ecrã (o resto fica como vem):
+
+| Ecrã | Escolha |
+|---|---|
+| Idioma | o que preferir |
+| Teclado | **Portuguese** |
+| Tipo de instalação | **Ubuntu Server** (não a "minimized") |
+| Rede | o cabo aparece com um IP: seguir |
+| Disco | **Use an entire disk** — o disco da torre. Confirmar: apaga o Windows |
+| Perfil | o seu nome; **nome do servidor: `torre-jarvis`** — nunca `spotify-service` (M4); um utilizador e uma password: este é o **utilizador de administração** dos passos seguintes |
+| Ubuntu Pro | saltar |
+| SSH | ✅ **Install OpenSSH server** |
+| Snaps em destaque | nenhum |
+
+No fim, *Reboot now*, e tirar a pen quando pedir.
+
+### A4. Primeiro arranque
+
+Entrar com o utilizador e a password do perfil, e:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+hostname -I          # o IP da torre — anotar
+lscpu | grep -E "Model name|^CPU\(s\)"
+free -h
+```
+
+O processador e a memória vão para o `docs/FASE-9-servidor.md`.
+
+A partir daqui pode-se desligar o monitor e o teclado e continuar **do
+portátil**, numa PowerShell:
+
+```powershell
+ssh UTILIZADOR@IP-DA-TORRE
+```
 
 ---
 
 ## 0. Antes de começar
 
-- [ ] A torre tem **outro nome** na rede que não `spotify-service` (M4). Ver
-      com `hostname`; mudar com `sudo hostnamectl set-hostname torre-jarvis`.
+- [ ] A torre chama-se `torre-jarvis` (ou outro nome que não `spotify-service`)
+      (M4). Ver com `hostname`; mudar com `sudo hostnamectl set-hostname torre-jarvis`.
 - [ ] Ligada **por cabo**, se der (M2).
-- [ ] Na **BIOS**: ligar sozinha quando volta a corrente — costuma chamar-se
-      *After Power Loss* ou *AC Power Recovery*, em *Power On* (M5).
+- [ ] Na **BIOS**: *After Power Loss* em **Power On** — feito no A2 (M5).
 
 ## 1. Pacotes e utilizador
 
